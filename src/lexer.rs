@@ -31,6 +31,12 @@ enum Token<'source> {
     If,
     #[regex(r"else")]
     Else,
+    #[regex(r"fun")]
+    Fun,
+    #[regex(r"let")]
+    Let,
+    #[regex(r"const")]
+    Const,
 
     #[regex(r"\+")]
     Plus,
@@ -101,6 +107,9 @@ mod tests {
         check_lex_one_token("xor", Token::Xor);
         check_lex_one_token("if", Token::If);
         check_lex_one_token("else", Token::Else);
+        check_lex_one_token("fun", Token::Fun);
+        check_lex_one_token("let", Token::Let);
+        check_lex_one_token("const", Token::Const);
     }
 
     #[test]
