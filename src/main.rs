@@ -1,5 +1,6 @@
 use winnow::{ascii::float, combinator::alt, prelude::*, token::literal};
 mod lexer;
+mod parser;
 
 #[derive(Debug, PartialEq)]
 enum AstNode {

@@ -3,7 +3,7 @@ use std::num::ParseFloatError;
 use logos::Logos;
 
 #[derive(Default, Debug, Clone, PartialEq)]
-enum LexingError {
+pub enum LexingError {
     InvalidFloat,
     #[default]
     UnrecognizedToken,
@@ -18,7 +18,7 @@ impl From<ParseFloatError> for LexingError {
 #[derive(Debug, PartialEq, Logos)]
 #[logos(skip r"[ \t]+")]
 #[logos(error = LexingError)]
-enum Token<'source> {
+pub enum Token<'source> {
     #[regex(r"not")]
     Not,
     #[regex(r"and")]

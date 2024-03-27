@@ -1,0 +1,31 @@
+# EmJay grammar
+
+```
+program := statement*;
+
+statement :=
+    let |
+    assigment
+    ;
+
+let := LET IDENTIFIER EQUAL expression;
+
+assigment := IDENTIFIER EQUAL expression;
+
+expression :=
+    term PLUS expression |
+    term MINUS expression |
+    term
+    ;
+
+term :=
+    factor MULTIPLY term |
+    factor DIVIDE term |
+    factor
+    ;
+
+factor :=
+    IDENTIFIER |
+    NUMERIC_LITERAL
+    ;
+```
