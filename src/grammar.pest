@@ -1,0 +1,7 @@
+letStatement = { "let" ~ identifier ~ "=" ~ expression }
+
+expression = { identifier  }
+
+identifier = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
+
+WHITESPACE = _{ " " | "\t" }
