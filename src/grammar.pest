@@ -1,7 +1,17 @@
+program = { SOI ~ functionDeclaration+ ~ EOI }
+
+functionDeclaration = { "fn" ~ identifier ~ "(" ~ ")" ~ block }
+
+block = { "{" ~ statement* ~ "}" }
+
+statement = _{ (letStatement | assignmentStatement) ~ ";" }
+
 letStatement = { "let" ~ identifier ~ "=" ~ expression }
+
+assignmentStatement = { identifier ~ "=" ~ expression }
 
 expression = { identifier  }
 
-identifier = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
+identifier = @{ XID_START ~ (XID_CONTINUE | "_")* }
 
-WHITESPACE = _{ " " | "\t" }
+WHITESPACE = _{ " " | "\t" | NEWLINE }
