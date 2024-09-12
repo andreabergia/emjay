@@ -10,8 +10,20 @@ letStatement = { "let" ~ identifier ~ "=" ~ expression }
 
 assignmentStatement = { identifier ~ "=" ~ expression }
 
-expression = { identifier  }
+expression = { factor }
 
-identifier = @{ XID_START ~ (XID_CONTINUE | "_")* }
+factor = {number | identifier}
+
+number = @{"-"? ~ (hexNumber | decimalNumber)}
+
+decimalNumber = @{
+    ("0" | ASCII_NONZERO_DIGIT ~ ASCII_DIGIT*)
+    ~ ("." ~ ASCII_DIGIT*)?
+    ~ (^"e" ~ ("+" | "-")? ~ ASCII_DIGIT+)?
+}
+
+hexNumber = @{ "0" ~ "x" ~ ASCII_HEX_DIGIT+ }
+
+identifier = @{ XID_START ~ XID_CONTINUE* }
 
 WHITESPACE = _{ " " | "\t" | NEWLINE }

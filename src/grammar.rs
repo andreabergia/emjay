@@ -11,8 +11,57 @@ mod tests {
     use pest::Parser;
 
     #[test]
+    fn grammar_can_parse_number() {
+        fn parse_number(input: &str) -> &str {
+            let parsed = EmjayGrammar::parse(Rule::number, input)
+                .expect("can parse number")
+                .next()
+                .unwrap();
+            parsed.as_str()
+        }
+
+        assert_eq!("0", parse_number("0"));
+        assert_eq!("1", parse_number("1"));
+        assert_eq!("-123", parse_number("-123"));
+        assert_eq!("0.123", parse_number("0.123"));
+        assert_eq!("1e6", parse_number("1e6"));
+        assert_eq!("1.2e7", parse_number("1.2e7"));
+        assert_eq!("0x42A", parse_number("0x42A"));
+        assert_eq!("-0x42A", parse_number("-0x42A"));
+    }
+
+    #[test]
+    fn grammar_can_parse_identifier() {
+        fn parse_identifier(input: &str) -> &str {
+            let parsed = EmjayGrammar::parse(Rule::identifier, input)
+                .expect("can parse identifier")
+                .next()
+                .unwrap();
+            parsed.as_str()
+        }
+
+        assert_eq!("x", parse_identifier("x"));
+        assert_eq!("x_32", parse_identifier("x_32"));
+        assert_eq!("éñò", parse_identifier("éñò"));
+    }
+
+    #[test]
+    fn grammar_can_parse_expression() {
+        fn parse_expression(input: &str) -> &str {
+            let parsed = EmjayGrammar::parse(Rule::expression, input)
+                .expect("can parse expression")
+                .next()
+                .unwrap();
+            parsed.as_str()
+        }
+
+        assert_eq!("x", parse_expression("x"));
+        assert_eq!("42", parse_expression("42"));
+    }
+
+    #[test]
     fn grammar_can_parse_let() {
-        let parsed = EmjayGrammar::parse(Rule::statement, "let x = y;")
+        let parsed = EmjayGrammar::parse(Rule::statement, "let x = 1;")
             .expect("can parse let statement")
             .next()
             .unwrap();
@@ -21,7 +70,7 @@ mod tests {
             let id = inner.next().unwrap().as_str();
             let expression = inner.next().unwrap().as_str();
             assert_eq!(id, "x");
-            assert_eq!(expression, "y");
+            assert_eq!(expression, "1");
         } else {
             assert!(false, "should have parsed a let statement");
         }
