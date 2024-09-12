@@ -1,11 +1,8 @@
 use pest::error::Error;
 use pest::iterators::Pair;
 use pest::Parser;
-use pest_derive::Parser;
 
-#[derive(Parser)]
-#[grammar = "grammar.pest"]
-pub struct EmjayParser;
+use crate::grammar::{EmjayGrammar, Rule};
 
 #[derive(Debug)]
 struct Function {
@@ -84,7 +81,7 @@ fn parse_function(rule: Pair<'_, Rule>) -> Result<Function, Error<Rule>> {
 }
 
 fn parse_program(program: &str) -> Result<Program, Error<Rule>> {
-    let mut parsed = EmjayParser::parse(Rule::program, program)?;
+    let mut parsed = EmjayGrammar::parse(Rule::program, program)?;
     let parsed = parsed.next().unwrap();
 
     let mut functions: Program = Default::default();
@@ -102,50 +99,6 @@ fn parse_program(program: &str) -> Result<Program, Error<Rule>> {
 #[cfg(test)]
 mod tests {
     use crate::parser::parse_program;
-
-    use super::{EmjayParser, Rule};
-    use pest::Parser;
-
-    #[test]
-    fn grammar_can_parse_let() {
-        let parsed = EmjayParser::parse(Rule::letStatement, "let x1 = y")
-            .expect("can parse simple statement")
-            .next()
-            .unwrap();
-        match parsed.as_rule() {
-            Rule::letStatement => {
-                let mut inner = parsed.into_inner();
-                let id = inner.next().unwrap().as_str();
-                let expression = inner.next().unwrap().as_str();
-                println!("id: {}, expr: {}", id, expression);
-            }
-            _ => assert!(false),
-        }
-    }
-
-    #[test]
-    fn grammar_can_parse_program() {
-        let p = EmjayParser::parse(
-            Rule::program,
-            r"
-        fn foo() {
-            let x1 = y;
-        }
-
-        fn bar() {
-            let x1 = x;
-            let x2 = y;
-            x3 = z;
-        }
-
-        fn empty() {}
-        ",
-        )
-        .expect("can parse simple program")
-        .next()
-        .unwrap();
-        println!("{:?}", p);
-    }
 
     #[test]
     fn can_parse_program() {
