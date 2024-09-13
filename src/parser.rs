@@ -41,9 +41,9 @@ enum Expression<'input> {
     Fact(Box<Self>),
 }
 
-fn parse_expression(rule: Pair<'_, Rule>) -> Result<Expression, Error<Rule>> {
+fn parse_expression(rule: Pair<'_, Rule>) -> Expression {
     let pratt = crate::grammar::pratt_parser();
-    Ok(pratt
+    pratt
         .map_primary(|primary| match primary.as_rule() {
             Rule::number => Expression::Number(primary.as_str().parse().unwrap()),
             Rule::identifier => Expression::Identifier(primary.as_str()),
@@ -66,44 +66,39 @@ fn parse_expression(rule: Pair<'_, Rule>) -> Result<Expression, Error<Rule>> {
             Rule::rem => Expression::Rem(Box::new(left), Box::new(right)),
             _ => unreachable!(),
         })
-        .parse(rule.into_inner()))
+        .parse(rule.into_inner())
 }
 
-fn parse_let(rule: Pair<'_, Rule>) -> Result<BlockElement, Error<Rule>> {
+fn parse_let(rule: Pair<'_, Rule>) -> BlockElement {
     let mut inner = rule.into_inner();
     let name = inner.next().unwrap().as_str();
-    let expression = parse_expression(inner.next().unwrap())?;
-    Ok(BlockElement::LetStatement { name, expression })
+    let expression = parse_expression(inner.next().unwrap());
+    BlockElement::LetStatement { name, expression }
 }
 
-fn parse_assignment(rule: Pair<'_, Rule>) -> Result<BlockElement, Error<Rule>> {
+fn parse_assignment(rule: Pair<'_, Rule>) -> BlockElement {
     let mut inner = rule.into_inner();
     let name = inner.next().unwrap().as_str();
-    let expression = parse_expression(inner.next().unwrap())?;
-    Ok(BlockElement::AssignmentStatement { name, expression })
+    let expression = parse_expression(inner.next().unwrap());
+    BlockElement::AssignmentStatement { name, expression }
 }
 
-fn parse_block(rule: Pair<'_, Rule>) -> Result<Block, Error<Rule>> {
-    let block: Result<Block, Error<Rule>> = rule
-        .into_inner()
+fn parse_block(rule: Pair<'_, Rule>) -> Block {
+    rule.into_inner()
         .map(|statement| match statement.as_rule() {
             Rule::letStatement => parse_let(statement),
             Rule::assignmentStatement => parse_assignment(statement),
-            Rule::block => Ok(BlockElement::NestedBlock(parse_block(statement)?)),
+            Rule::block => BlockElement::NestedBlock(parse_block(statement)),
             _ => unreachable!(),
         })
-        .collect();
-    block
+        .collect()
 }
 
-fn parse_function(rule: Pair<'_, Rule>) -> Result<Function, Error<Rule>> {
+fn parse_function(rule: Pair<'_, Rule>) -> Function {
     let mut rule = rule.into_inner();
-    let id = rule.next().unwrap().as_str();
-    let block = parse_block(rule.next().unwrap())?;
-    Ok(Function {
-        name: id,
-        block,
-    })
+    let name = rule.next().unwrap().as_str();
+    let block = parse_block(rule.next().unwrap());
+    Function { name, block }
 }
 
 fn parse_program(program: &str) -> Result<Program, Error<Rule>> {
@@ -113,7 +108,7 @@ fn parse_program(program: &str) -> Result<Program, Error<Rule>> {
     let mut functions: Program = Default::default();
     for rule in parsed.into_inner() {
         match rule.as_rule() {
-            Rule::functionDeclaration => functions.push(parse_function(rule)?),
+            Rule::functionDeclaration => functions.push(parse_function(rule)),
             Rule::EOI => {}
             _ => unreachable!(),
         }
