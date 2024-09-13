@@ -10,12 +10,12 @@ mod tests {
     use super::{EmjayGrammar, Rule};
     use pest::Parser;
 
-    fn parse_as(input: &str, rule: Rule) -> &str{
+    fn parse_as(input: &str, rule: Rule) -> &str {
         let parsed = EmjayGrammar::parse(rule, input)
-        .expect(&format!("can parse as {:?}", rule))
-        .next()
-        .unwrap();
-    parsed.as_str()
+            .expect(&format!("can parse as {:?}", rule))
+            .next()
+            .unwrap();
+        parsed.as_str()
     }
 
     #[test]
@@ -38,22 +38,16 @@ mod tests {
     }
 
     #[test]
-    fn grammar_can_parse_factors() {
-        assert_eq!("x", parse_as("x", Rule::factor));
-        assert_eq!("42", parse_as("42", Rule::factor));
-        assert_eq!("(y)", parse_as("(y)", Rule::factor));
-    }
-
-    #[test]
-    fn grammar_can_parse_term() {
-        assert_eq!("x + 3", parse_as("x + 3", Rule::term));
-        assert_eq!("x - y + z", parse_as("x - y + z", Rule::term));
-    }
-
-    #[test]
     fn grammar_can_parse_expression() {
         assert_eq!("x", parse_as("x", Rule::expression));
         assert_eq!("42", parse_as("42", Rule::expression));
+        assert_eq!("-3", parse_as("-3", Rule::expression));
+        assert_eq!("2!", parse_as("2!", Rule::expression));
+        assert_eq!("3 * 4 + 2", parse_as("3 * 4 + 2", Rule::expression));
+        assert_eq!(
+            "-(1 + x) * 4 - 2",
+            parse_as("-(1 + x) * 4 - 2", Rule::expression)
+        );
     }
 
     #[test]

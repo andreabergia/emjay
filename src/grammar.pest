@@ -10,11 +10,19 @@ letStatement = { "let" ~ identifier ~ "=" ~ expression }
 
 assignmentStatement = { identifier ~ "=" ~ expression }
 
-expression = { term }
-
-term = { factor ~ (("+" | "-") ~ term)* }
-
-factor = {number | identifier | ("(" ~ expression ~ ")")}
+expression = { prefix? ~ factor ~ postfix? ~ (infix ~ prefix? ~ factor ~ postfix? )* }
+    infix    =  _{ add | sub | mul | div | pow | rem }
+      add    =   { "+" } // Addition
+      sub    =   { "-" } // Subtraction
+      mul    =   { "*" } // Multiplication
+      div    =   { "/" } // Division
+      pow    =   { "^" } // Exponentiation
+      rem    =   { "%" } // Remainder
+    prefix   =  _{ neg }
+      neg    =   { "-" } // Negation
+    postfix  =  _{ fac }
+      fac    =   { "!" } // Factorial
+    factor  =  _{ number | identifier | "(" ~ expression ~ ")" }
 
 number = @{"-"? ~ (hexNumber | decimalNumber)}
 
