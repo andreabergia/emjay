@@ -27,15 +27,45 @@ enum Statement {
 type Block = Vec<Statement>;
 
 #[derive(Debug)]
-struct Expression {
-    identifier: String,
+enum Expression {
+    Identifier(String),
+    Number(f64),
+    Negate(Box<Expression>),
+    Add(Box<Expression>, Box<Expression>),
+    Sub(Box<Expression>, Box<Expression>),
+    Mul(Box<Expression>, Box<Expression>),
+    Div(Box<Expression>, Box<Expression>),
+    Pow(Box<Expression>, Box<Expression>),
+    Rem(Box<Expression>, Box<Expression>),
+    Fact(Box<Expression>),
 }
 
 fn parse_expression(rule: Pair<'_, Rule>) -> Result<Expression, Error<Rule>> {
-    let expression = rule.as_str();
-    return Ok(Expression {
-        identifier: expression.to_string(),
-    });
+    let pratt = crate::grammar::pratt_parser();
+    Ok(pratt
+        .map_primary(|primary| match primary.as_rule() {
+            Rule::number => Expression::Number(primary.as_str().parse().unwrap()),
+            Rule::identifier => Expression::Identifier(primary.as_str().to_owned()),
+            _ => unreachable!(),
+        })
+        .map_prefix(|prefix, right| match prefix.as_rule() {
+            Rule::neg => Expression::Negate(Box::new(right)),
+            _ => unreachable!(),
+        })
+        .map_postfix(|left, postfix| match postfix.as_rule() {
+            Rule::fac => Expression::Fact(Box::new(left)),
+            _ => unreachable!(),
+        })
+        .map_infix(|left, op, right| match op.as_rule() {
+            Rule::add => Expression::Add(Box::new(left), Box::new(right)),
+            Rule::sub => Expression::Sub(Box::new(left), Box::new(right)),
+            Rule::mul => Expression::Mul(Box::new(left), Box::new(right)),
+            Rule::div => Expression::Div(Box::new(left), Box::new(right)),
+            Rule::pow => Expression::Pow(Box::new(left), Box::new(right)),
+            Rule::rem => Expression::Rem(Box::new(left), Box::new(right)),
+            _ => unreachable!(),
+        })
+        .parse(rule.into_inner()))
 }
 
 fn parse_let(rule: Pair<'_, Rule>) -> Result<Statement, Error<Rule>> {
@@ -102,7 +132,8 @@ mod tests {
 
     #[test]
     fn can_parse_program() {
-        let p = parse_program("fn foo() { let x = y; }");
+        let p = parse_program("fn foo() { let x = -y + 3 * z!; }");
+        assert!(p.is_ok());
         println!("{:?}", p);
     }
 }

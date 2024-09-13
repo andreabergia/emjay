@@ -2,7 +2,7 @@ program = { SOI ~ functionDeclaration+ ~ EOI }
 
 functionDeclaration = { "fn" ~ identifier ~ "(" ~ ")" ~ block }
 
-block = { "{" ~ statement* ~ "}" }
+block = { "{" ~ (statement | block)* ~ "}" }
 
 statement = _{ (letStatement | assignmentStatement) ~ ";" }
 

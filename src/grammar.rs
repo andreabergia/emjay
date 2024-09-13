@@ -1,9 +1,25 @@
+use std::sync::{LazyLock, OnceLock};
+
+use pest::pratt_parser::{Assoc, Op, PrattParser};
 use pest_derive::Parser;
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
 #[allow(dead_code)]
 pub struct EmjayGrammar;
+
+static EMJAY_PRATT_PARSER: LazyLock<PrattParser<Rule>> = LazyLock::new(|| {
+    PrattParser::new()
+        .op(Op::infix(Rule::add, Assoc::Left) | Op::infix(Rule::sub, Assoc::Left))
+        .op(Op::infix(Rule::mul, Assoc::Left) | Op::infix(Rule::div, Assoc::Left))
+        .op(Op::infix(Rule::pow, Assoc::Right))
+        .op(Op::postfix(Rule::fac))
+        .op(Op::prefix(Rule::neg))
+});
+
+pub fn pratt_parser() -> &'static PrattParser<Rule> {
+    &*EMJAY_PRATT_PARSER
+}
 
 #[cfg(test)]
 mod tests {
@@ -96,6 +112,12 @@ mod tests {
         } else {
             assert!(false, "should have parsed a block");
         }
+    }
+
+    #[test]
+    fn grammar_can_parse_nested_block() {
+        let source = "{ let x = 42; {} let y = x + 1; }";
+        assert_eq!(source, parse_as(source, Rule::block));
     }
 
     #[test]
