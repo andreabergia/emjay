@@ -5,39 +5,40 @@ use pest::Parser;
 use crate::grammar::{EmjayGrammar, Rule};
 
 #[derive(Debug)]
-struct Function {
-    name: String,
-    statements: Block,
+struct Function<'input> {
+    name: &'input str,
+    block: Block<'input>,
 }
 
-type Program = Vec<Function>;
+type Program<'input> = Vec<Function<'input>>;
 
 #[derive(Debug)]
-enum Statement {
+enum BlockElement<'input> {
     LetStatement {
-        name: String,
-        expression: Expression,
+        name: &'input str,
+        expression: Expression<'input>,
     },
     AssignmentStatement {
-        name: String,
-        expression: Expression,
+        name: &'input str,
+        expression: Expression<'input>,
     },
+    NestedBlock(Block<'input>),
 }
 
-type Block = Vec<Statement>;
+type Block<'input> = Vec<BlockElement<'input>>;
 
 #[derive(Debug)]
-enum Expression {
-    Identifier(String),
+enum Expression<'input> {
+    Identifier(&'input str),
     Number(f64),
-    Negate(Box<Expression>),
-    Add(Box<Expression>, Box<Expression>),
-    Sub(Box<Expression>, Box<Expression>),
-    Mul(Box<Expression>, Box<Expression>),
-    Div(Box<Expression>, Box<Expression>),
-    Pow(Box<Expression>, Box<Expression>),
-    Rem(Box<Expression>, Box<Expression>),
-    Fact(Box<Expression>),
+    Negate(Box<Self>),
+    Add(Box<Self>, Box<Self>),
+    Sub(Box<Self>, Box<Self>),
+    Mul(Box<Self>, Box<Self>),
+    Div(Box<Self>, Box<Self>),
+    Pow(Box<Self>, Box<Self>),
+    Rem(Box<Self>, Box<Self>),
+    Fact(Box<Self>),
 }
 
 fn parse_expression(rule: Pair<'_, Rule>) -> Result<Expression, Error<Rule>> {
@@ -45,7 +46,7 @@ fn parse_expression(rule: Pair<'_, Rule>) -> Result<Expression, Error<Rule>> {
     Ok(pratt
         .map_primary(|primary| match primary.as_rule() {
             Rule::number => Expression::Number(primary.as_str().parse().unwrap()),
-            Rule::identifier => Expression::Identifier(primary.as_str().to_owned()),
+            Rule::identifier => Expression::Identifier(primary.as_str()),
             _ => unreachable!(),
         })
         .map_prefix(|prefix, right| match prefix.as_rule() {
@@ -68,24 +69,18 @@ fn parse_expression(rule: Pair<'_, Rule>) -> Result<Expression, Error<Rule>> {
         .parse(rule.into_inner()))
 }
 
-fn parse_let(rule: Pair<'_, Rule>) -> Result<Statement, Error<Rule>> {
+fn parse_let(rule: Pair<'_, Rule>) -> Result<BlockElement, Error<Rule>> {
     let mut inner = rule.into_inner();
-    let id = inner.next().unwrap().as_str();
+    let name = inner.next().unwrap().as_str();
     let expression = parse_expression(inner.next().unwrap())?;
-    Ok(Statement::LetStatement {
-        name: id.to_string(),
-        expression,
-    })
+    Ok(BlockElement::LetStatement { name, expression })
 }
 
-fn parse_assignment(rule: Pair<'_, Rule>) -> Result<Statement, Error<Rule>> {
+fn parse_assignment(rule: Pair<'_, Rule>) -> Result<BlockElement, Error<Rule>> {
     let mut inner = rule.into_inner();
-    let id = inner.next().unwrap().as_str();
+    let name = inner.next().unwrap().as_str();
     let expression = parse_expression(inner.next().unwrap())?;
-    Ok(Statement::AssignmentStatement {
-        name: id.to_string(),
-        expression,
-    })
+    Ok(BlockElement::AssignmentStatement { name, expression })
 }
 
 fn parse_block(rule: Pair<'_, Rule>) -> Result<Block, Error<Rule>> {
@@ -94,6 +89,7 @@ fn parse_block(rule: Pair<'_, Rule>) -> Result<Block, Error<Rule>> {
         .map(|statement| match statement.as_rule() {
             Rule::letStatement => parse_let(statement),
             Rule::assignmentStatement => parse_assignment(statement),
+            Rule::block => Ok(BlockElement::NestedBlock(parse_block(statement)?)),
             _ => unreachable!(),
         })
         .collect();
@@ -105,8 +101,8 @@ fn parse_function(rule: Pair<'_, Rule>) -> Result<Function, Error<Rule>> {
     let id = rule.next().unwrap().as_str();
     let block = parse_block(rule.next().unwrap())?;
     Ok(Function {
-        name: id.to_string(),
-        statements: block,
+        name: id,
+        block,
     })
 }
 
@@ -132,7 +128,7 @@ mod tests {
 
     #[test]
     fn can_parse_program() {
-        let p = parse_program("fn foo() { let x = -y + 3 * z!; }");
+        let p = parse_program("fn foo() { let x = -y + 3 * z!; { let z = 42; } }");
         assert!(p.is_ok());
         println!("{:?}", p);
     }
