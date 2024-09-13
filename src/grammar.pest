@@ -10,9 +10,11 @@ letStatement = { "let" ~ identifier ~ "=" ~ expression }
 
 assignmentStatement = { identifier ~ "=" ~ expression }
 
-expression = { factor }
+expression = { term }
 
-factor = {number | identifier}
+term = { factor ~ (("+" | "-") ~ term)* }
+
+factor = {number | identifier | ("(" ~ expression ~ ")")}
 
 number = @{"-"? ~ (hexNumber | decimalNumber)}
 

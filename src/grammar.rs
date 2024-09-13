@@ -10,53 +10,50 @@ mod tests {
     use super::{EmjayGrammar, Rule};
     use pest::Parser;
 
+    fn parse_as(input: &str, rule: Rule) -> &str{
+        let parsed = EmjayGrammar::parse(rule, input)
+        .expect(&format!("can parse as {:?}", rule))
+        .next()
+        .unwrap();
+    parsed.as_str()
+    }
+
     #[test]
     fn grammar_can_parse_number() {
-        fn parse_number(input: &str) -> &str {
-            let parsed = EmjayGrammar::parse(Rule::number, input)
-                .expect("can parse number")
-                .next()
-                .unwrap();
-            parsed.as_str()
-        }
-
-        assert_eq!("0", parse_number("0"));
-        assert_eq!("1", parse_number("1"));
-        assert_eq!("-123", parse_number("-123"));
-        assert_eq!("0.123", parse_number("0.123"));
-        assert_eq!("1e6", parse_number("1e6"));
-        assert_eq!("1.2e7", parse_number("1.2e7"));
-        assert_eq!("0x42A", parse_number("0x42A"));
-        assert_eq!("-0x42A", parse_number("-0x42A"));
+        assert_eq!("0", parse_as("0", Rule::number));
+        assert_eq!("1", parse_as("1", Rule::number));
+        assert_eq!("-123", parse_as("-123", Rule::number));
+        assert_eq!("0.123", parse_as("0.123", Rule::number));
+        assert_eq!("1e6", parse_as("1e6", Rule::number));
+        assert_eq!("1.2e7", parse_as("1.2e7", Rule::number));
+        assert_eq!("0x42A", parse_as("0x42A", Rule::number));
+        assert_eq!("-0x42A", parse_as("-0x42A", Rule::number));
     }
 
     #[test]
     fn grammar_can_parse_identifier() {
-        fn parse_identifier(input: &str) -> &str {
-            let parsed = EmjayGrammar::parse(Rule::identifier, input)
-                .expect("can parse identifier")
-                .next()
-                .unwrap();
-            parsed.as_str()
-        }
+        assert_eq!("x", parse_as("x", Rule::identifier));
+        assert_eq!("x_32", parse_as("x_32", Rule::identifier));
+        assert_eq!("éñò", parse_as("éñò", Rule::identifier));
+    }
 
-        assert_eq!("x", parse_identifier("x"));
-        assert_eq!("x_32", parse_identifier("x_32"));
-        assert_eq!("éñò", parse_identifier("éñò"));
+    #[test]
+    fn grammar_can_parse_factors() {
+        assert_eq!("x", parse_as("x", Rule::factor));
+        assert_eq!("42", parse_as("42", Rule::factor));
+        assert_eq!("(y)", parse_as("(y)", Rule::factor));
+    }
+
+    #[test]
+    fn grammar_can_parse_term() {
+        assert_eq!("x + 3", parse_as("x + 3", Rule::term));
+        assert_eq!("x - y + z", parse_as("x - y + z", Rule::term));
     }
 
     #[test]
     fn grammar_can_parse_expression() {
-        fn parse_expression(input: &str) -> &str {
-            let parsed = EmjayGrammar::parse(Rule::expression, input)
-                .expect("can parse expression")
-                .next()
-                .unwrap();
-            parsed.as_str()
-        }
-
-        assert_eq!("x", parse_expression("x"));
-        assert_eq!("42", parse_expression("42"));
+        assert_eq!("x", parse_as("x", Rule::expression));
+        assert_eq!("42", parse_as("42", Rule::expression));
     }
 
     #[test]
