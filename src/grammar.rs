@@ -1,4 +1,4 @@
-use std::sync::{LazyLock, OnceLock};
+use std::sync::LazyLock;
 
 use pest::pratt_parser::{Assoc, Op, PrattParser};
 use pest_derive::Parser;
