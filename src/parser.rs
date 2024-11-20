@@ -2,44 +2,8 @@ use pest::error::Error;
 use pest::iterators::Pair;
 use pest::Parser;
 
+use crate::ast::{Block, BlockElement, Expression, Function, Program};
 use crate::grammar::{EmjayGrammar, Rule};
-
-#[derive(Debug)]
-struct Function<'input> {
-    name: &'input str,
-    block: Block<'input>,
-}
-
-type Program<'input> = Vec<Function<'input>>;
-
-#[derive(Debug)]
-enum BlockElement<'input> {
-    LetStatement {
-        name: &'input str,
-        expression: Expression<'input>,
-    },
-    AssignmentStatement {
-        name: &'input str,
-        expression: Expression<'input>,
-    },
-    NestedBlock(Block<'input>),
-}
-
-type Block<'input> = Vec<BlockElement<'input>>;
-
-#[derive(Debug)]
-enum Expression<'input> {
-    Identifier(&'input str),
-    Number(f64),
-    Negate(Box<Self>),
-    Add(Box<Self>, Box<Self>),
-    Sub(Box<Self>, Box<Self>),
-    Mul(Box<Self>, Box<Self>),
-    Div(Box<Self>, Box<Self>),
-    Pow(Box<Self>, Box<Self>),
-    Rem(Box<Self>, Box<Self>),
-    Fact(Box<Self>),
-}
 
 fn parse_expression(rule: Pair<'_, Rule>) -> Expression {
     let pratt = crate::grammar::pratt_parser();
