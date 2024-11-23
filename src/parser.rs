@@ -65,7 +65,7 @@ fn parse_function(rule: Pair<'_, Rule>) -> Function {
     Function { name, block }
 }
 
-pub fn parse_program(program: &str) -> Result<Program, Error<Rule>> {
+pub fn parse_program(program: &str) -> Result<Program, Box<Error<Rule>>> {
     let mut parsed = EmjayGrammar::parse(Rule::program, program)?;
     let parsed = parsed.next().unwrap();
 

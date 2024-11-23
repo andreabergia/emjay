@@ -18,7 +18,7 @@ static EMJAY_PRATT_PARSER: LazyLock<PrattParser<Rule>> = LazyLock::new(|| {
 });
 
 pub fn pratt_parser() -> &'static PrattParser<Rule> {
-    &*EMJAY_PRATT_PARSER
+    &EMJAY_PRATT_PARSER
 }
 
 #[cfg(test)]
