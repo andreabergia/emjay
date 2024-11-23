@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Function<'input> {
     pub name: &'input str,
     pub block: Block<'input>,
@@ -6,7 +6,7 @@ pub struct Function<'input> {
 
 pub type Program<'input> = Vec<Function<'input>>;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum BlockElement<'input> {
     LetStatement {
         name: &'input str,
@@ -21,7 +21,7 @@ pub enum BlockElement<'input> {
 
 pub type Block<'input> = Vec<BlockElement<'input>>;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Expression<'input> {
     Identifier(&'input str),
     Number(f64),

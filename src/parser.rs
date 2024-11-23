@@ -65,7 +65,7 @@ fn parse_function(rule: Pair<'_, Rule>) -> Function {
     Function { name, block }
 }
 
-fn parse_program(program: &str) -> Result<Program, Error<Rule>> {
+pub fn parse_program(program: &str) -> Result<Program, Error<Rule>> {
     let mut parsed = EmjayGrammar::parse(Rule::program, program)?;
     let parsed = parsed.next().unwrap();
 
@@ -83,12 +83,36 @@ fn parse_program(program: &str) -> Result<Program, Error<Rule>> {
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::parse_program;
+    use crate::{
+        ast::{BlockElement, Expression, Function},
+        parser::parse_program,
+    };
 
     #[test]
     fn can_parse_program() {
-        let p = parse_program("fn foo() { let x = -y + 3 * z!; { let z = 42; } }");
-        assert!(p.is_ok());
-        println!("{:?}", p);
+        let program = parse_program("fn foo() { let x = -y + 3 * z!; { let z = 42; } }")
+            .expect("should have been able to parse program");
+        assert_eq!(
+            vec![Function {
+                name: "foo",
+                block: vec![
+                    BlockElement::LetStatement {
+                        name: "x",
+                        expression: Expression::Add(
+                            Box::new(Expression::Negate(Box::new(Expression::Identifier("y")))),
+                            Box::new(Expression::Mul(
+                                Box::new(Expression::Number(3f64)),
+                                Box::new(Expression::Fact(Box::new(Expression::Identifier("z"))))
+                            ))
+                        )
+                    },
+                    BlockElement::NestedBlock(vec![BlockElement::LetStatement {
+                        name: "z",
+                        expression: Expression::Number(42f64)
+                    }])
+                ]
+            }],
+            program
+        );
     }
 }
