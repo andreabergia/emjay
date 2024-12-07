@@ -13,6 +13,22 @@ pub enum Instruction {
         op1: RegisterIndex,
         op2: RegisterIndex,
     },
+    Sub {
+        dest: RegisterIndex,
+        op1: RegisterIndex,
+        op2: RegisterIndex,
+    },
+    Mul {
+        dest: RegisterIndex,
+        op1: RegisterIndex,
+        op2: RegisterIndex,
+    },
+    Div {
+        dest: RegisterIndex,
+        op1: RegisterIndex,
+        op2: RegisterIndex,
+    },
+
     Ret {
         reg: RegisterIndex,
     },
@@ -28,6 +44,9 @@ impl fmt::Display for Instruction {
         match self {
             Instruction::Mov { dest, val } => write!(f, "mov r{}, {}", dest, val),
             Instruction::Add { dest, op1, op2 } => write!(f, "add r{}, r{}, r{}", dest, op1, op2),
+            Instruction::Sub { dest, op1, op2 } => write!(f, "sub r{}, r{}, r{}", dest, op1, op2),
+            Instruction::Mul { dest, op1, op2 } => write!(f, "mul r{}, r{}, r{}", dest, op1, op2),
+            Instruction::Div { dest, op1, op2 } => write!(f, "div r{}, r{}, r{}", dest, op1, op2),
             Instruction::Ret { reg } => write!(f, "ret r{}", reg),
         }
     }

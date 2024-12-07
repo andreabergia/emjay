@@ -57,20 +57,48 @@ impl<'input> FunctionCompiler<'input> {
                 *reg_with_value
             }
             Expression::Number(n) => {
-                let reg = self.next_free_reg;
-                self.next_free_reg += 1;
+                let reg = self.allocate_reg();
                 body.push(Instruction::Mov { dest: reg, val: *n });
                 reg
             }
             Expression::Negate(_) => todo!(),
-            Expression::Add(_, _) => todo!(),
-            Expression::Sub(_, _) => todo!(),
-            Expression::Mul(_, _) => todo!(),
-            Expression::Div(_, _) => todo!(),
-            Expression::Pow(_, _) => todo!(),
-            Expression::Rem(_, _) => todo!(),
-            Expression::Fact(_) => todo!(),
+            Expression::Add(left, right) => {
+                let op1 = self.compile_expression(body, left);
+                let op2 = self.compile_expression(body, right);
+                let dest = self.allocate_reg();
+                body.push(Instruction::Add { dest, op1, op2 });
+                dest
+            }
+            Expression::Sub(left, right) => {
+                let op1 = self.compile_expression(body, left);
+                let op2 = self.compile_expression(body, right);
+                let dest = self.allocate_reg();
+                body.push(Instruction::Sub { dest, op1, op2 });
+                dest
+            }
+            Expression::Mul(left, right) => {
+                let op1 = self.compile_expression(body, left);
+                let op2 = self.compile_expression(body, right);
+                let dest = self.allocate_reg();
+                body.push(Instruction::Mul { dest, op1, op2 });
+                dest
+            }
+            Expression::Div(left, right) => {
+                let op1 = self.compile_expression(body, left);
+                let op2 = self.compile_expression(body, right);
+                let dest = self.allocate_reg();
+                body.push(Instruction::Div { dest, op1, op2 });
+                dest
+            }
+
+            _ => todo!(),
         }
+    }
+
+    fn allocate_reg(&mut self) -> RegisterIndex {
+        let reg = self.next_free_reg;
+        self.next_free_reg += 1;
+        reg
     }
 }
 
@@ -81,7 +109,8 @@ mod test {
 
     #[test]
     fn can_compile_trivial_function() {
-        let program = parse_program("fn the_answer() { let a = 3; let b = 4; return b; }").unwrap();
+        let program =
+            parse_program("fn the_answer() { let a = 3; let b = 4; return a * b + 1; }").unwrap();
         let compiled = compile(program);
         assert_eq!(compiled.len(), 1);
         println!("{}", compiled[0]);
