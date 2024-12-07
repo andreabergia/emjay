@@ -90,8 +90,15 @@ mod tests {
 
     #[test]
     fn can_parse_program() {
-        let program = parse_program("fn foo() { let x = -y + 3 * z!; { let z = 42; } }")
-            .expect("should have been able to parse program");
+        let program = parse_program(
+            r"fn foo() {
+            let x = -y + 3 * z!;
+            {
+                let z = 42;
+            }
+        }",
+        )
+        .expect("should have been able to parse program");
         assert_eq!(
             vec![Function {
                 name: "foo",
