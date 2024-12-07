@@ -16,6 +16,7 @@ pub enum BlockElement<'input> {
         name: &'input str,
         expression: Expression<'input>,
     },
+    ReturnStatement(Expression<'input>),
     NestedBlock(Block<'input>),
 }
 

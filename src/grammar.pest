@@ -4,11 +4,13 @@ functionDeclaration = { "fn" ~ identifier ~ "(" ~ ")" ~ block }
 
 block = { "{" ~ (statement | block)* ~ "}" }
 
-statement = _{ (letStatement | assignmentStatement) ~ ";" }
+statement = _{ (letStatement | assignmentStatement | returnStatement) ~ ";" }
 
 letStatement = { "let" ~ identifier ~ "=" ~ expression }
 
 assignmentStatement = { identifier ~ "=" ~ expression }
+
+returnStatement = { "return" ~ expression }
 
 expression = { prefix? ~ factor ~ postfix? ~ (infix ~ prefix? ~ factor ~ postfix? )* }
     infix    =  _{ add | sub | mul | div | pow | rem }

@@ -64,14 +64,19 @@ mod tests {
     }
 
     #[test]
-    fn grammar_can_parse_let() {
+    fn grammar_can_parse_statement_let() {
         assert_can_be_parsed_as("let x = 1", Rule::letStatement);
         assert_can_be_parsed_as("let y_3π = 1 + x", Rule::letStatement);
     }
 
     #[test]
-    fn grammar_can_parse_assignment() {
+    fn grammar_can_parse_statement_assignment() {
         assert_can_be_parsed_as("x = x + 1", Rule::assignmentStatement);
+    }
+
+    #[test]
+    fn grammar_can_parse_statement_return() {
+        assert_can_be_parsed_as("return 42", Rule::returnStatement);
     }
 
     #[test]

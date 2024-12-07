@@ -33,25 +33,32 @@ fn parse_expression(rule: Pair<'_, Rule>) -> Expression {
         .parse(rule.into_inner())
 }
 
-fn parse_let(rule: Pair<'_, Rule>) -> BlockElement {
+fn parse_statement_let(rule: Pair<'_, Rule>) -> BlockElement {
     let mut inner = rule.into_inner();
     let name = inner.next().unwrap().as_str();
     let expression = parse_expression(inner.next().unwrap());
     BlockElement::LetStatement { name, expression }
 }
 
-fn parse_assignment(rule: Pair<'_, Rule>) -> BlockElement {
+fn parse_statement_assignment(rule: Pair<'_, Rule>) -> BlockElement {
     let mut inner = rule.into_inner();
     let name = inner.next().unwrap().as_str();
     let expression = parse_expression(inner.next().unwrap());
     BlockElement::AssignmentStatement { name, expression }
 }
 
+fn parse_statement_return(rule: Pair<'_, Rule>) -> BlockElement {
+    let mut inner = rule.into_inner();
+    let expression = parse_expression(inner.next().unwrap());
+    BlockElement::ReturnStatement(expression)
+}
+
 fn parse_block(rule: Pair<'_, Rule>) -> Block {
     rule.into_inner()
         .map(|statement| match statement.as_rule() {
-            Rule::letStatement => parse_let(statement),
-            Rule::assignmentStatement => parse_assignment(statement),
+            Rule::letStatement => parse_statement_let(statement),
+            Rule::assignmentStatement => parse_statement_assignment(statement),
+            Rule::returnStatement => parse_statement_return(statement),
             Rule::block => BlockElement::NestedBlock(parse_block(statement)),
             _ => unreachable!(),
         })
@@ -96,6 +103,7 @@ mod tests {
             {
                 let z = 42;
             }
+            return x;
         }",
         )
         .expect("should have been able to parse program");
@@ -116,7 +124,8 @@ mod tests {
                     BlockElement::NestedBlock(vec![BlockElement::LetStatement {
                         name: "z",
                         expression: Expression::Number(42f64)
-                    }])
+                    }]),
+                    BlockElement::ReturnStatement(Expression::Identifier("x")),
                 ]
             }],
             program
