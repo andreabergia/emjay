@@ -65,6 +65,9 @@ enum X64Instruction {
         source: Register,
         destination: Register,
     },
+    AddRegToRax {
+        register: Register,
+    },
 }
 
 impl Display for X64Instruction {
@@ -80,6 +83,7 @@ impl Display for X64Instruction {
                 source,
                 destination,
             } => write!(f, "mov  {}, {}", destination, source),
+            X64Instruction::AddRegToRax { register } => write!(f, "add  rax, {}", register),
         }
     }
 }
@@ -103,6 +107,9 @@ impl X64Instruction {
                 0x89,
                 self.lookup_reg_reg(source.clone(), destination.clone()),
             ],
+            X64Instruction::AddRegToRax { register } => {
+                vec![0x48, 0x01, self.lookup_reg_reg(*register, Register::Rax)]
+            }
         }
     }
 
@@ -123,7 +130,6 @@ impl X64Instruction {
 }
 
 enum Location {
-    Accumulator,
     Register { register: Register },
     Stack { offset: usize },
 }
@@ -131,7 +137,6 @@ enum Location {
 impl Display for Location {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Location::Accumulator => write!(f, "rax"),
             Location::Register { register: reg } => write!(f, "{}", reg),
             Location::Stack { offset } => write!(f, "rsp[{}]", offset),
         }
@@ -162,7 +167,6 @@ impl MachineCodeGenerator for X64LinuxGenerator {
                 crate::ir::Instruction::Mvi { dest, val } => {
                     let loc = self.locations.get(dest).unwrap();
                     match loc {
-                        Location::Accumulator => todo!(),
                         Location::Stack { offset } => todo!(),
                         Location::Register { register } => {
                             instructions.push(X64Instruction::MovImmToReg {
@@ -174,32 +178,40 @@ impl MachineCodeGenerator for X64LinuxGenerator {
                 }
 
                 crate::ir::Instruction::Ret { reg } => {
-                    let loc = self.locations.get(reg).unwrap();
+                    self.move_to_accumulator(reg, &mut instructions);
+
                     // Epilogue and then return
-                    match loc {
-                        Location::Accumulator => todo!(),
-                        Location::Stack { offset } => todo!(),
-                        Location::Register { register } => {
-                            instructions.push(X64Instruction::MovRegToReg {
-                                source: *register,
-                                destination: Register::Rax,
-                            })
-                        }
-                    }
                     instructions.push(X64Instruction::Pop {
                         register: Register::Rbp,
                     });
                     instructions.push(X64Instruction::Retn);
                 }
 
-                //crate::ir::Instruction::Add { dest, op1, op2 } => {
-                //    let loc_dest = self.locations.get(dest).unwrap();
-                //    let loc1 = self.locations.get(op1).unwrap();
-                //    let loc2 = self.locations.get(op2).unwrap();
-                //    writeln!(&mut asm, "mov rax, {loc1}");
-                //    writeln!(&mut asm, "add rax, {loc2}");
-                //    writeln!(&mut asm, "mov {loc_dest}, rax");
-                //}
+                crate::ir::Instruction::Add { dest, op1, op2 } => {
+                    self.move_to_accumulator(op1, &mut instructions);
+
+                    let loc2 = self.locations.get(op2).unwrap();
+                    match loc2 {
+                        Location::Stack { offset } => todo!(),
+                        Location::Register { register } => {
+                            instructions.push(X64Instruction::AddRegToRax {
+                                register: *register,
+                            })
+                        }
+                    }
+
+                    let loc_dest = self.locations.get(dest).unwrap();
+                    match loc_dest {
+                        Location::Register { register } => {
+                            instructions.push(X64Instruction::MovRegToReg {
+                                source: Register::Rax,
+                                destination: *register,
+                            })
+                        }
+                        Location::Stack { offset } => todo!(),
+                    }
+                }
+
                 _ => todo!(),
             }
         }
@@ -253,6 +265,17 @@ impl X64LinuxGenerator {
             };
         }
     }
+
+    fn move_to_accumulator(&mut self, reg: &RegisterIndex, instructions: &mut Vec<X64Instruction>) {
+        let loc = self.locations.get(reg).unwrap();
+        match loc {
+            Location::Register { register } => instructions.push(X64Instruction::MovRegToReg {
+                source: *register,
+                destination: Register::Rax,
+            }),
+            Location::Stack { offset } => todo!(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -262,7 +285,7 @@ mod test {
 
     #[test]
     fn can_compile_trivial_function() {
-        let program = parse_program("fn the_answer() { let a = 42; return a; }").unwrap();
+        let program = parse_program("fn the_answer() { let a = 42; return a + 1; }").unwrap();
         let compiled = frontend::compile(program);
         assert_eq!(compiled.len(), 1);
 
