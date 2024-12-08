@@ -4,6 +4,7 @@ use parser::parse_program;
 
 mod ast;
 mod backend;
+mod backend_x64_linux;
 mod frontend;
 mod grammar;
 mod ir;
