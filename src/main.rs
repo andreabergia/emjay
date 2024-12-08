@@ -3,6 +3,7 @@
 use parser::parse_program;
 
 mod ast;
+mod backend;
 mod frontend;
 mod grammar;
 mod ir;

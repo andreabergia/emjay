@@ -5,7 +5,7 @@ use crate::{
     ir::{CompiledFunction, Instruction, RegisterIndex},
 };
 
-fn compile(program: Program) -> Vec<CompiledFunction> {
+pub fn compile(program: Program) -> Vec<CompiledFunction> {
     program
         .iter()
         .map(|f| {
@@ -25,7 +25,11 @@ impl<'input> FunctionCompiler<'input> {
     fn compile_function(&mut self, f: &Function<'input>) -> CompiledFunction<'input> {
         let mut body: Vec<Instruction> = Vec::new();
         self.compile_block(&mut body, &f.block);
-        CompiledFunction { name: f.name, body }
+        CompiledFunction {
+            name: f.name,
+            max_used_registers: self.next_free_reg,
+            body,
+        }
     }
 
     fn compile_block(&mut self, body: &mut Vec<Instruction>, block: &Block<'input>) {
@@ -58,7 +62,7 @@ impl<'input> FunctionCompiler<'input> {
             }
             Expression::Number(n) => {
                 let reg = self.allocate_reg();
-                body.push(Instruction::Mov { dest: reg, val: *n });
+                body.push(Instruction::Mvi { dest: reg, val: *n });
                 reg
             }
             Expression::Negate(_) => todo!(),
@@ -96,9 +100,7 @@ impl<'input> FunctionCompiler<'input> {
     }
 
     fn allocate_reg(&mut self) -> RegisterIndex {
-        let reg = self.next_free_reg;
-        self.next_free_reg += 1;
-        reg
+        self.next_free_reg.inc()
     }
 }
 
