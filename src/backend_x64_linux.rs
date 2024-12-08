@@ -188,28 +188,9 @@ impl MachineCodeGenerator for X64LinuxGenerator {
                 }
 
                 crate::ir::Instruction::Add { dest, op1, op2 } => {
-                    self.move_to_accumulator(op1, &mut instructions);
-
-                    let loc2 = self.locations.get(op2).unwrap();
-                    match loc2 {
-                        Location::Stack { offset } => todo!(),
-                        Location::Register { register } => {
-                            instructions.push(X64Instruction::AddRegToRax {
-                                register: *register,
-                            })
-                        }
-                    }
-
-                    let loc_dest = self.locations.get(dest).unwrap();
-                    match loc_dest {
-                        Location::Register { register } => {
-                            instructions.push(X64Instruction::MovRegToReg {
-                                source: Register::Rax,
-                                destination: *register,
-                            })
-                        }
-                        Location::Stack { offset } => todo!(),
-                    }
+                    self.do_bin_op(&mut instructions, op1, op2, dest, |register| {
+                        X64Instruction::AddRegToRax { register }
+                    })
                 }
 
                 _ => todo!(),
@@ -272,6 +253,32 @@ impl X64LinuxGenerator {
             Location::Register { register } => instructions.push(X64Instruction::MovRegToReg {
                 source: *register,
                 destination: Register::Rax,
+            }),
+            Location::Stack { offset } => todo!(),
+        }
+    }
+
+    fn do_bin_op(
+        &mut self,
+        instructions: &mut Vec<X64Instruction>,
+        op1: &RegisterIndex,
+        op2: &RegisterIndex,
+        dest: &RegisterIndex,
+        lambda: impl Fn(Register) -> X64Instruction,
+    ) {
+        self.move_to_accumulator(op1, instructions);
+
+        let loc2 = self.locations.get(op2).unwrap();
+        match loc2 {
+            Location::Stack { offset } => todo!(),
+            Location::Register { register } => instructions.push(lambda(*register)),
+        }
+
+        let loc_dest = self.locations.get(dest).unwrap();
+        match loc_dest {
+            Location::Register { register } => instructions.push(X64Instruction::MovRegToReg {
+                source: Register::Rax,
+                destination: *register,
             }),
             Location::Stack { offset } => todo!(),
         }
