@@ -34,6 +34,9 @@ fn call_fn(bytes: &[u8]) -> f64 {
 
 fn main() {
     let source = "fn the_answer() { let a = 12; let b = 42; return a + b; }";
+    println!("source:");
+    println!("{}", source);
+    println!();
 
     let program = parse_program(source).unwrap();
     let compiled = frontend::compile(program);
