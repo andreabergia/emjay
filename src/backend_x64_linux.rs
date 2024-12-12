@@ -89,7 +89,7 @@ impl Display for X64Instruction {
 }
 
 impl X64Instruction {
-    fn into_machine_code(&self) -> Vec<u8> {
+    fn make_machine_code(&self) -> Vec<u8> {
         match self {
             X64Instruction::Retn => vec![0xC3],
             X64Instruction::Push { register } => vec![0x50 + register.index()],
@@ -102,11 +102,7 @@ impl X64Instruction {
             X64Instruction::MovRegToReg {
                 source,
                 destination,
-            } => vec![
-                0x48,
-                0x89,
-                self.lookup_reg_reg(source.clone(), destination.clone()),
-            ],
+            } => vec![0x48, 0x89, self.lookup_reg_reg(*source, *destination)],
             X64Instruction::AddRegToRax { register } => {
                 vec![0x48, 0x01, self.lookup_reg_reg(*register, Register::Rax)]
             }
@@ -167,7 +163,7 @@ impl MachineCodeGenerator for X64LinuxGenerator {
                 crate::ir::Instruction::Mvi { dest, val } => {
                     let loc = self.locations.get(dest).unwrap();
                     match loc {
-                        Location::Stack { offset } => todo!(),
+                        Location::Stack { .. } => todo!(),
                         Location::Register { register } => {
                             instructions.push(X64Instruction::MovImmToReg {
                                 register: *register,
@@ -201,8 +197,8 @@ impl MachineCodeGenerator for X64LinuxGenerator {
         let mut machine_code: Vec<u8> = Vec::new();
 
         for instruction in instructions {
-            writeln!(&mut asm, "{}", instruction);
-            machine_code.extend(instruction.into_machine_code());
+            let _ = writeln!(&mut asm, "{}", instruction);
+            machine_code.extend(instruction.make_machine_code());
         }
 
         GeneratedMachineCode { asm, machine_code }
@@ -254,7 +250,7 @@ impl X64LinuxGenerator {
                 source: *register,
                 destination: Register::Rax,
             }),
-            Location::Stack { offset } => todo!(),
+            Location::Stack { .. } => todo!(),
         }
     }
 
@@ -270,7 +266,7 @@ impl X64LinuxGenerator {
 
         let loc2 = self.locations.get(op2).unwrap();
         match loc2 {
-            Location::Stack { offset } => todo!(),
+            Location::Stack { .. } => todo!(),
             Location::Register { register } => instructions.push(lambda(*register)),
         }
 
@@ -280,7 +276,7 @@ impl X64LinuxGenerator {
                 source: Register::Rax,
                 destination: *register,
             }),
-            Location::Stack { offset } => todo!(),
+            Location::Stack { .. } => todo!(),
         }
     }
 }

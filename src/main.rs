@@ -3,7 +3,7 @@
 use backend::MachineCodeGenerator;
 use backend_x64_linux::X64LinuxGenerator;
 use parser::parse_program;
-use rustix::mm::{mmap_anonymous, mprotect, MapFlags, MprotectFlags, ProtFlags};
+use rustix::mm::{mmap_anonymous, MapFlags, ProtFlags};
 
 mod ast;
 mod backend;

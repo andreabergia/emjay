@@ -25,7 +25,7 @@ impl fmt::Display for RegisterIndex {
 
 impl RegisterIndex {
     pub fn inc(&mut self) -> Self {
-        let prev = self.clone();
+        let prev = *self;
         self.value += 1;
         prev
     }

@@ -41,7 +41,7 @@ impl<'input> FunctionCompiler<'input> {
                 self.id_to_reg.insert(name, reg);
             }
 
-            BlockElement::AssignmentStatement { name, expression } => todo!(),
+            BlockElement::AssignmentStatement { .. } => todo!(),
             BlockElement::ReturnStatement(expression) => {
                 let reg = self.compile_expression(body, expression);
                 body.push(Instruction::Ret { reg });
