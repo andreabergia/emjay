@@ -12,7 +12,7 @@ assignmentStatement = { identifier ~ "=" ~ expression }
 
 returnStatement = { "return" ~ expression }
 
-expression = { prefix? ~ factor ~ postfix? ~ (infix ~ prefix? ~ factor ~ postfix? )* }
+expression = { prefix? ~ factor ~ (infix ~ prefix? ~ factor )* }
     infix    =  _{ add | sub | mul | div | pow | rem }
       add    =   { "+" } // Addition
       sub    =   { "-" } // Subtraction
@@ -22,8 +22,6 @@ expression = { prefix? ~ factor ~ postfix? ~ (infix ~ prefix? ~ factor ~ postfix
       rem    =   { "%" } // Remainder
     prefix   =  _{ neg }
       neg    =   { "-" } // Negation
-    postfix  =  _{ fac }
-      fac    =   { "!" } // Factorial
     factor  =  _{ number | identifier | "(" ~ expression ~ ")" }
 
 number = @{"-"? ~ (hexNumber | decimalNumber)}

@@ -13,7 +13,6 @@ static EMJAY_PRATT_PARSER: LazyLock<PrattParser<Rule>> = LazyLock::new(|| {
         .op(Op::infix(Rule::add, Assoc::Left) | Op::infix(Rule::sub, Assoc::Left))
         .op(Op::infix(Rule::mul, Assoc::Left) | Op::infix(Rule::div, Assoc::Left))
         .op(Op::infix(Rule::pow, Assoc::Right))
-        .op(Op::postfix(Rule::fac))
         .op(Op::prefix(Rule::neg))
 });
 
@@ -58,7 +57,6 @@ mod tests {
         assert_can_be_parsed_as("x", Rule::expression);
         assert_can_be_parsed_as("42", Rule::expression);
         assert_can_be_parsed_as("-3", Rule::expression);
-        assert_can_be_parsed_as("2!", Rule::expression);
         assert_can_be_parsed_as("3 * 4 + 2", Rule::expression);
         assert_can_be_parsed_as("-(1 + x) * 4 - 2", Rule::expression);
     }

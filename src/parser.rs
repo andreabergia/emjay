@@ -17,10 +17,6 @@ fn parse_expression(rule: Pair<'_, Rule>) -> Expression {
             Rule::neg => Expression::Negate(Box::new(right)),
             _ => unreachable!(),
         })
-        .map_postfix(|left, postfix| match postfix.as_rule() {
-            Rule::fac => Expression::Fact(Box::new(left)),
-            _ => unreachable!(),
-        })
         .map_infix(|left, op, right| match op.as_rule() {
             Rule::add => Expression::Add(Box::new(left), Box::new(right)),
             Rule::sub => Expression::Sub(Box::new(left), Box::new(right)),
@@ -99,7 +95,7 @@ mod tests {
     fn can_parse_program() {
         let program = parse_program(
             r"fn foo() {
-            let x = -y + 3 * z!;
+            let x = -y + 3 * z;
             {
                 let z = 42;
             }
@@ -117,7 +113,7 @@ mod tests {
                             Box::new(Expression::Negate(Box::new(Expression::Identifier("y")))),
                             Box::new(Expression::Mul(
                                 Box::new(Expression::Number(3f64)),
-                                Box::new(Expression::Fact(Box::new(Expression::Identifier("z"))))
+                                Box::new(Expression::Identifier("z"))
                             ))
                         )
                     },

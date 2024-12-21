@@ -33,5 +33,4 @@ pub enum Expression<'input> {
     Div(Box<Self>, Box<Self>),
     Pow(Box<Self>, Box<Self>),
     Rem(Box<Self>, Box<Self>),
-    Fact(Box<Self>),
 }
