@@ -26,10 +26,7 @@ mod tests {
     use pest::Parser;
 
     fn assert_can_be_parsed_as(input: &str, rule: Rule) {
-        let parsed = EmjayGrammar::parse(rule, input)
-            .expect(&format!("can parse as {:?}", rule))
-            .next()
-            .unwrap();
+        let parsed = EmjayGrammar::parse(rule, input).unwrap().next().unwrap();
         assert_eq!(input, parsed.as_str());
     }
 
