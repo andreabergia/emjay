@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
 use backend::MachineCodeGenerator;
-#[cfg(all(target_arch = "aarch64", target_os = "macos"))]
-use backend_aarch64_macos::Aarch64MacOsGenerator;
+#[cfg(target_arch = "aarch64")]
+use backend_aarch64::Aarch64Generator;
 #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
 use backend_x64_linux::X64LinuxGenerator;
 use parser::parse_program;
@@ -10,8 +10,8 @@ use rustix::mm::{mmap_anonymous, mprotect, MapFlags, MprotectFlags, ProtFlags};
 
 mod ast;
 mod backend;
-#[cfg(all(target_arch = "aarch64", target_os = "macos"))]
-mod backend_aarch64_macos;
+#[cfg(target_arch = "aarch64")]
+mod backend_aarch64;
 #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
 mod backend_x64_linux;
 mod frontend;
@@ -76,8 +76,8 @@ fn main() {
 
     #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
     let mut gen = X64LinuxGenerator::default();
-    #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
-    let mut gen = Aarch64MacOsGenerator::default();
+    #[cfg(target_arch = "aarch64")]
+    let mut gen = Aarch64Generator::default();
 
     let machine_code = gen.generate_machine_code(&compiled[0]);
     println!("asm:");

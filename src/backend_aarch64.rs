@@ -6,7 +6,7 @@ use crate::{
 };
 
 #[derive(Default)]
-pub struct Aarch64MacOsGenerator {}
+pub struct Aarch64Generator {}
 
 #[derive(Debug, Clone, Copy)]
 enum Register {
@@ -212,7 +212,7 @@ impl Aarch64Instruction {
     }
 }
 
-impl MachineCodeGenerator for Aarch64MacOsGenerator {
+impl MachineCodeGenerator for Aarch64Generator {
     fn generate_machine_code(&mut self, function: &CompiledFunction) -> GeneratedMachineCode {
         let mut instructions = Vec::new();
 
@@ -309,7 +309,7 @@ mod test {
         let compiled = frontend::compile(program);
         assert_eq!(compiled.len(), 1);
 
-        let mut gen = Aarch64MacOsGenerator::default();
+        let mut gen = Aarch64Generator::default();
         let machine_code = gen.generate_machine_code(&compiled[0]);
         println!("{}", machine_code.asm);
         machine_code
