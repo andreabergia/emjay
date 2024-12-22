@@ -223,7 +223,7 @@ impl Aarch64Instruction {
                 destination,
             } => {
                 let mut i: u32 = 0xAA0003E0;
-                i |= (source.index() as u32) << 16;
+                i |= (source.index() as u32) << 15;
                 i |= destination.index() as u32;
                 i.to_le_bytes().to_vec()
             }
@@ -386,6 +386,17 @@ mod test {
                 0xE0, 0xF2,
             ]
         );
+    }
+
+    #[test]
+    fn can_encode_move_reg_to_reg() {
+        let instruction = Aarch64Instruction::MovRegToReg {
+            source: Register::X8,
+            destination: Register::X0,
+        };
+
+        let machine_code = instruction.make_machine_code();
+        assert_eq!(machine_code, vec![0xE0, 0x03, 0x04, 0xAA]);
     }
 
     #[test]
