@@ -62,7 +62,7 @@ fn call_fn(bytes: &[u8]) -> f64 {
 
 fn main() {
     // let source = "fn the_answer() { let a = 12; let b = 42; return a + b; }";
-    let source = "fn the_answer() { let a = 1; return a; }";
+    let source = "fn the_answer() { let a = 1; let b = 2; let c = a; let d = b; return c; }";
     println!("source:");
     println!("{}", source);
     println!();

@@ -5,9 +5,6 @@ use crate::{
     ir::{CompiledFunction, Instruction},
 };
 
-#[derive(Default)]
-pub struct Aarch64Generator {}
-
 #[derive(Debug, Clone, Copy)]
 enum Register {
     X0,
@@ -115,7 +112,14 @@ impl Display for Register {
 
 enum Aarch64Instruction {
     Ret,
-    MovImmToReg { register: Register, value: f64 },
+    MovImmToReg {
+        register: Register,
+        value: f64,
+    },
+    MovRegToReg {
+        source: Register,
+        destination: Register,
+    },
 }
 
 impl Display for Aarch64Instruction {
@@ -123,7 +127,13 @@ impl Display for Aarch64Instruction {
         match self {
             Aarch64Instruction::Ret => write!(f, "ret"),
             Aarch64Instruction::MovImmToReg { register, value } => {
-                write!(f, "mov {}, {}", register, value)
+                write!(f, "movz {}, {}", register, value)
+            }
+            Aarch64Instruction::MovRegToReg {
+                source,
+                destination,
+            } => {
+                write!(f, "mov  {}, {}", destination, source)
             }
         }
     }
@@ -208,24 +218,62 @@ impl Aarch64Instruction {
                     v
                 }
             }
+            Aarch64Instruction::MovRegToReg {
+                source,
+                destination,
+            } => {
+                let mut i: u32 = 0xAA0003E0;
+                i |= (source.index() as u32) << 16;
+                i |= destination.index() as u32;
+                i.to_le_bytes().to_vec()
+            }
         }
     }
 }
 
+#[derive(Debug, Clone)]
+enum Location {
+    Register { register: Register },
+    Stack { offset: usize },
+}
+
+#[derive(Default)]
+pub struct Aarch64Generator {
+    locations: Vec<Location>,
+}
+
 impl MachineCodeGenerator for Aarch64Generator {
     fn generate_machine_code(&mut self, function: &CompiledFunction) -> GeneratedMachineCode {
-        let mut instructions = Vec::new();
+        self.allocate_registers(function);
 
+        let mut instructions = Vec::new();
         for instruction in function.body.iter() {
             match instruction {
-                Instruction::Mvi { dest: _, val } => {
-                    // TODO: check destination
-                    instructions.push(Aarch64Instruction::MovImmToReg {
-                        register: Register::X0,
-                        value: *val,
-                    })
+                Instruction::Mvi { dest, val } => {
+                    let dest: usize = (*dest).into();
+                    match self.locations[dest] {
+                        Location::Register { register } => {
+                            instructions.push(Aarch64Instruction::MovImmToReg {
+                                register,
+                                value: *val,
+                            })
+                        }
+                        Location::Stack { offset: _ } => todo!(),
+                    }
                 }
-                Instruction::Ret { reg: _ } => instructions.push(Aarch64Instruction::Ret),
+                Instruction::Ret { reg } => {
+                    let dest: usize = (*reg).into();
+                    match self.locations[dest] {
+                        Location::Register { register } => {
+                            instructions.push(Aarch64Instruction::MovRegToReg {
+                                source: register,
+                                destination: Register::X0,
+                            });
+                        }
+                        Location::Stack { offset: _ } => todo!(),
+                    }
+                    instructions.push(Aarch64Instruction::Ret);
+                }
                 _ => todo!(),
             }
         }
@@ -239,6 +287,43 @@ impl MachineCodeGenerator for Aarch64Generator {
         }
 
         GeneratedMachineCode { asm, machine_code }
+    }
+}
+
+impl Aarch64Generator {
+    // Extremely stupid algorithm - we never reuse registers!
+    fn allocate_registers(&mut self, function: &CompiledFunction) {
+        self.locations.reserve(function.max_used_registers.into());
+
+        for i in 0usize..function.max_used_registers.into() {
+            let location: Location = match i {
+                0 => Location::Register {
+                    register: Register::X8,
+                },
+                1 => Location::Register {
+                    register: Register::X10,
+                },
+                2 => Location::Register {
+                    register: Register::X11,
+                },
+                3 => Location::Register {
+                    register: Register::X12,
+                },
+                4 => Location::Register {
+                    register: Register::X13,
+                },
+                5 => Location::Register {
+                    register: Register::X14,
+                },
+                6 => Location::Register {
+                    register: Register::X15,
+                },
+                _ => Location::Stack {
+                    offset: i * std::mem::size_of::<u64>(),
+                },
+            };
+            self.locations.push(location);
+        }
     }
 }
 

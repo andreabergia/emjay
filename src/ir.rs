@@ -17,6 +17,12 @@ impl From<RegisterIndex> for u32 {
     }
 }
 
+impl From<RegisterIndex> for usize {
+    fn from(value: RegisterIndex) -> Self {
+        value.value as usize
+    }
+}
+
 impl fmt::Display for RegisterIndex {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.value)
