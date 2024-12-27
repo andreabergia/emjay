@@ -61,8 +61,8 @@ fn call_fn(bytes: &[u8]) -> f64 {
 }
 
 fn main() {
-    // let source = "fn the_answer() { let a = 12; let b = 42; return a + b; }";
-    let source = "fn the_answer() { let a = 1; let b = 2; let c = a; let d = b; return c; }";
+    let source = "fn the_answer() { let a = 12; let b = 42; let c = 1; return a + b + c; }";
+    //let source = "fn the_answer() { let a = 1; let b = 2; let c = a; let d = b; return c; }";
     println!("source:");
     println!("{}", source);
     println!();
@@ -84,10 +84,12 @@ fn main() {
     println!("{}", machine_code.asm);
 
     println!("Machine code:");
-    machine_code
-        .machine_code
-        .iter()
-        .for_each(|byte| print!("{:02X} ", byte));
+    for (index, byte) in machine_code.machine_code.iter().enumerate() {
+        print!("{:02X} ", byte);
+        if index % 4 == 3 {
+            println!();
+        }
+    }
     println!();
     println!();
 

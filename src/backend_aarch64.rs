@@ -120,6 +120,11 @@ enum Aarch64Instruction {
         source: Register,
         destination: Register,
     },
+    AddRegToReg {
+        destination: Register,
+        reg1: Register,
+        reg2: Register,
+    },
 }
 
 impl Display for Aarch64Instruction {
@@ -135,6 +140,13 @@ impl Display for Aarch64Instruction {
             } => {
                 write!(f, "mov  {}, {}", destination, source)
             }
+            Aarch64Instruction::AddRegToReg {
+                destination,
+                reg1,
+                reg2,
+            } => {
+                write!(f, "add  {}, {}, {}", destination, reg1, reg2)
+            }
         }
     }
 }
@@ -148,6 +160,7 @@ impl Aarch64Instruction {
     fn make_machine_code(&self) -> Vec<u8> {
         match self {
             Aarch64Instruction::Ret => vec![0xc0, 0x03, 0x5f, 0xd6],
+
             Aarch64Instruction::MovImmToReg { register, value } => {
                 // Note: there are a lot more efficient encoding: for example, we always
                 // use 64 bit registers here, and we could use the bitmask immediate
@@ -218,12 +231,25 @@ impl Aarch64Instruction {
                     v
                 }
             }
+
             Aarch64Instruction::MovRegToReg {
                 source,
                 destination,
             } => {
                 let mut i: u32 = 0xAA0003E0;
-                i |= (source.index() as u32) << 15;
+                i |= (source.index() as u32) << 16;
+                i |= destination.index() as u32;
+                i.to_le_bytes().to_vec()
+            }
+
+            Aarch64Instruction::AddRegToReg {
+                destination,
+                reg1,
+                reg2,
+            } => {
+                let mut i: u32 = 0x8B000000;
+                i |= (reg1.index() as u32) << 5;
+                i |= (reg2.index() as u32) << 16;
                 i |= destination.index() as u32;
                 i.to_le_bytes().to_vec()
             }
@@ -274,6 +300,37 @@ impl MachineCodeGenerator for Aarch64Generator {
                     }
                     instructions.push(Aarch64Instruction::Ret);
                 }
+                Instruction::Add { dest, op1, op2 } => {
+                    let op1: usize = (*op1).into();
+                    let op2: usize = (*op2).into();
+
+                    match self.locations[op1] {
+                        Location::Register { register: reg1 } => match self.locations[op2] {
+                            Location::Register { register: reg2 } => {
+                                instructions.push(Aarch64Instruction::AddRegToReg {
+                                    destination: Register::X0,
+                                    reg1,
+                                    reg2,
+                                });
+                            }
+                            Location::Stack { offset: _ } => todo!(),
+                        },
+
+                        Location::Stack { offset: _ } => todo!(),
+                    }
+
+                    let dest: usize = (*dest).into();
+                    match self.locations[dest] {
+                        Location::Register { register } => {
+                            instructions.push(Aarch64Instruction::MovRegToReg {
+                                source: Register::X0,
+                                destination: register,
+                            });
+                        }
+                        Location::Stack { offset: _ } => todo!(),
+                    }
+                }
+
                 _ => todo!(),
             }
         }
@@ -397,6 +454,18 @@ mod test {
 
         let machine_code = instruction.make_machine_code();
         assert_eq!(machine_code, vec![0xE0, 0x03, 0x04, 0xAA]);
+    }
+
+    #[test]
+    fn can_encode_add_reg_to_reg() {
+        let instruction = Aarch64Instruction::AddRegToReg {
+            destination: Register::X0,
+            reg1: Register::X9,
+            reg2: Register::X10,
+        };
+
+        let machine_code = instruction.make_machine_code();
+        assert_eq!(machine_code, vec![0x20, 0x01, 0x0A, 0x8B]);
     }
 
     #[test]
