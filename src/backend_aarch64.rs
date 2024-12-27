@@ -204,69 +204,33 @@ impl Aarch64Instruction {
                 // https://kddnewton.com/2022/08/11/aarch64-bitmask-immediates.html
                 // But, since this is a toy, I don't really care about efficiency. :-)
 
-                let int_value = *value as u64;
+                let mut result: Vec<u8> = Vec::with_capacity(8);
+                let imm = *value as u64;
 
-                if int_value < 0xFFFF {
-                    let mut i0 = Self::MOVZ;
-                    i0 |= ((int_value & 0xFFFF) as u32) << 5;
-                    i0 |= register.index();
-
-                    i0.to_le_bytes().to_vec()
-                } else if int_value < 0xFFFFFFFF {
-                    let mut i0 = Self::MOVZ;
-                    i0 |= ((int_value & 0xFFFF) as u32) << 5;
-                    i0 |= register.index();
-
-                    let mut i1 = Self::MOVK_SHIFT_16;
-                    i1 |= (((int_value >> 16) & 0xFFFF) as u32) << 5;
-                    i1 |= register.index();
-
-                    let mut v: Vec<u8> = Vec::with_capacity(8);
-                    v.extend(i0.to_le_bytes());
-                    v.extend(i1.to_le_bytes());
-                    v
-                } else if int_value < 0xFFFFFFFFFFFF {
-                    let mut i0: u32 = Self::MOVZ;
-                    i0 |= ((int_value & 0xFFFF) as u32) << 5;
-                    i0 |= register.index();
-
-                    let mut i1 = Self::MOVK_SHIFT_16;
-                    i1 |= (((int_value >> 16) & 0xFFFF) as u32) << 5;
-                    i1 |= register.index();
-
-                    let mut i2 = Self::MOVK_SHIFT_32;
-                    i2 |= (((int_value >> 32) & 0xFFFF) as u32) << 5;
-                    i2 |= register.index();
-
-                    let mut v: Vec<u8> = Vec::with_capacity(12);
-                    v.extend(i0.to_le_bytes());
-                    v.extend(i1.to_le_bytes());
-                    v.extend(i2.to_le_bytes());
-                    v
-                } else {
-                    let mut i0: u32 = Self::MOVZ;
-                    i0 |= ((int_value & 0xFFFF) as u32) << 5;
-                    i0 |= register.index();
-
-                    let mut i1 = Self::MOVK_SHIFT_16;
-                    i1 |= (((int_value >> 16) & 0xFFFF) as u32) << 5;
-                    i1 |= register.index();
-
-                    let mut i2 = Self::MOVK_SHIFT_32;
-                    i2 |= (((int_value >> 32) & 0xFFFF) as u32) << 5;
-                    i2 |= register.index();
-
-                    let mut i3 = Self::MOVK_SHIFT_48;
-                    i3 |= (((int_value >> 48) & 0xFFFF) as u32) << 5;
-                    i3 |= register.index();
-
-                    let mut v: Vec<u8> = Vec::with_capacity(16);
-                    v.extend(i0.to_le_bytes());
-                    v.extend(i1.to_le_bytes());
-                    v.extend(i2.to_le_bytes());
-                    v.extend(i3.to_le_bytes());
-                    v
+                result.extend(Self::mov_imm(Self::MOVZ, imm & 0xFFFF, *register));
+                if imm > 0xFFFF {
+                    result.extend(Self::mov_imm(
+                        Self::MOVK_SHIFT_16,
+                        (imm >> 16) & 0xFFFF,
+                        *register,
+                    ));
                 }
+                if imm > 0xFFFFFFFF {
+                    result.extend(Self::mov_imm(
+                        Self::MOVK_SHIFT_32,
+                        (imm >> 32) & 0xFFFF,
+                        *register,
+                    ));
+                }
+                if imm > 0xFFFFFFFFFFFF {
+                    result.extend(Self::mov_imm(
+                        Self::MOVK_SHIFT_48,
+                        (imm >> 48) & 0xFFFF,
+                        *register,
+                    ));
+                }
+
+                result
             }
 
             Aarch64Instruction::MovRegToReg {
@@ -303,6 +267,13 @@ impl Aarch64Instruction {
                 reg2,
             } => Self::encode_three_reg_op(Self::SDIV, destination, reg1, reg2),
         }
+    }
+
+    fn mov_imm(base: u32, immediate: u64, register: Register) -> Vec<u8> {
+        let mut i0 = base;
+        i0 |= ((immediate & 0xFFFF) as u32) << 5;
+        i0 |= register.index();
+        i0.to_le_bytes().to_vec()
     }
 
     fn encode_three_reg_op(
