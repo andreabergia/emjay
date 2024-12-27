@@ -2,7 +2,7 @@ use std::fmt::{Display, Write};
 
 use crate::{
     backend::{GeneratedMachineCode, MachineCodeGenerator},
-    ir::{CompiledFunction, Instruction},
+    ir::{CompiledFunction, Instruction, RegisterIndex},
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -125,6 +125,21 @@ enum Aarch64Instruction {
         reg1: Register,
         reg2: Register,
     },
+    SubRegToReg {
+        destination: Register,
+        reg1: Register,
+        reg2: Register,
+    },
+    MulRegToReg {
+        destination: Register,
+        reg1: Register,
+        reg2: Register,
+    },
+    DivRegToReg {
+        destination: Register,
+        reg1: Register,
+        reg2: Register,
+    },
 }
 
 impl Display for Aarch64Instruction {
@@ -144,9 +159,25 @@ impl Display for Aarch64Instruction {
                 destination,
                 reg1,
                 reg2,
-            } => {
-                write!(f, "add  {}, {}, {}", destination, reg1, reg2)
-            }
+            } => write!(f, "add  {}, {}, {}", destination, reg1, reg2),
+
+            Aarch64Instruction::SubRegToReg {
+                destination,
+                reg1,
+                reg2,
+            } => write!(f, "subs  {}, {}, {}", destination, reg1, reg2),
+
+            Aarch64Instruction::MulRegToReg {
+                destination,
+                reg1,
+                reg2,
+            } => write!(f, "mul  {}, {}, {}", destination, reg1, reg2),
+
+            Aarch64Instruction::DivRegToReg {
+                destination,
+                reg1,
+                reg2,
+            } => write!(f, "sdiv {}, {}, {}", destination, reg1, reg2),
         }
     }
 }
@@ -156,6 +187,12 @@ impl Aarch64Instruction {
     const MOVK_SHIFT_16: u32 = 0xF2A00000;
     const MOVK_SHIFT_32: u32 = 0xF2C00000;
     const MOVK_SHIFT_48: u32 = 0xF2E00000;
+
+    const MOV: u32 = 0xAA0003E0;
+    const ADD: u32 = 0x8B000000;
+    const SUBS: u32 = 0xEB000000;
+    const MUL: u32 = 0x9B007C00;
+    const SDIV: u32 = 0x9AC00C00;
 
     fn make_machine_code(&self) -> Vec<u8> {
         match self {
@@ -236,7 +273,7 @@ impl Aarch64Instruction {
                 source,
                 destination,
             } => {
-                let mut i: u32 = 0xAA0003E0;
+                let mut i: u32 = Self::MOV;
                 i |= (source.index() as u32) << 16;
                 i |= destination.index() as u32;
                 i.to_le_bytes().to_vec()
@@ -246,14 +283,39 @@ impl Aarch64Instruction {
                 destination,
                 reg1,
                 reg2,
-            } => {
-                let mut i: u32 = 0x8B000000;
-                i |= (reg1.index() as u32) << 5;
-                i |= (reg2.index() as u32) << 16;
-                i |= destination.index() as u32;
-                i.to_le_bytes().to_vec()
-            }
+            } => Self::encode_three_reg_op(Self::ADD, destination, reg1, reg2),
+
+            Aarch64Instruction::SubRegToReg {
+                destination,
+                reg1,
+                reg2,
+            } => Self::encode_three_reg_op(Self::SUBS, destination, reg1, reg2),
+
+            Aarch64Instruction::MulRegToReg {
+                destination,
+                reg1,
+                reg2,
+            } => Self::encode_three_reg_op(Self::MUL, destination, reg1, reg2),
+
+            Aarch64Instruction::DivRegToReg {
+                destination,
+                reg1,
+                reg2,
+            } => Self::encode_three_reg_op(Self::SDIV, destination, reg1, reg2),
         }
+    }
+
+    fn encode_three_reg_op(
+        base: u32,
+        destination: &Register,
+        reg1: &Register,
+        reg2: &Register,
+    ) -> Vec<u8> {
+        let mut i: u32 = base;
+        i |= (reg1.index() as u32) << 5;
+        i |= (reg2.index() as u32) << 16;
+        i |= destination.index() as u32;
+        i.to_le_bytes().to_vec()
     }
 }
 
@@ -301,34 +363,43 @@ impl MachineCodeGenerator for Aarch64Generator {
                     instructions.push(Aarch64Instruction::Ret);
                 }
                 Instruction::Add { dest, op1, op2 } => {
-                    let op1: usize = (*op1).into();
-                    let op2: usize = (*op2).into();
-
-                    match self.locations[op1] {
-                        Location::Register { register: reg1 } => match self.locations[op2] {
-                            Location::Register { register: reg2 } => {
-                                instructions.push(Aarch64Instruction::AddRegToReg {
-                                    destination: Register::X0,
-                                    reg1,
-                                    reg2,
-                                });
-                            }
-                            Location::Stack { offset: _ } => todo!(),
-                        },
-
-                        Location::Stack { offset: _ } => todo!(),
-                    }
-
-                    let dest: usize = (*dest).into();
-                    match self.locations[dest] {
-                        Location::Register { register } => {
-                            instructions.push(Aarch64Instruction::MovRegToReg {
-                                source: Register::X0,
-                                destination: register,
-                            });
+                    self.do_binop(&mut instructions, *dest, *op1, *op2, |reg1, reg2| {
+                        Aarch64Instruction::AddRegToReg {
+                            destination: Register::X0,
+                            reg1,
+                            reg2,
                         }
-                        Location::Stack { offset: _ } => todo!(),
-                    }
+                    });
+                }
+
+                Instruction::Sub { dest, op1, op2 } => {
+                    self.do_binop(&mut instructions, *dest, *op1, *op2, |reg1, reg2| {
+                        Aarch64Instruction::SubRegToReg {
+                            destination: Register::X0,
+                            reg1,
+                            reg2,
+                        }
+                    });
+                }
+
+                Instruction::Mul { dest, op1, op2 } => {
+                    self.do_binop(&mut instructions, *dest, *op1, *op2, |reg1, reg2| {
+                        Aarch64Instruction::MulRegToReg {
+                            destination: Register::X0,
+                            reg1,
+                            reg2,
+                        }
+                    });
+                }
+
+                Instruction::Div { dest, op1, op2 } => {
+                    self.do_binop(&mut instructions, *dest, *op1, *op2, |reg1, reg2| {
+                        Aarch64Instruction::DivRegToReg {
+                            destination: Register::X0,
+                            reg1,
+                            reg2,
+                        }
+                    });
                 }
 
                 _ => todo!(),
@@ -380,6 +451,40 @@ impl Aarch64Generator {
                 },
             };
             self.locations.push(location);
+        }
+    }
+
+    fn do_binop(
+        &self,
+        instructions: &mut Vec<Aarch64Instruction>,
+        dest: RegisterIndex,
+        op1: RegisterIndex,
+        op2: RegisterIndex,
+        callback: impl Fn(Register, Register) -> Aarch64Instruction,
+    ) {
+        let op1: usize = op1.into();
+        let op2: usize = op2.into();
+
+        match self.locations[op1] {
+            Location::Register { register: reg1 } => match self.locations[op2] {
+                Location::Register { register: reg2 } => {
+                    instructions.push(callback(reg1, reg2));
+                }
+                Location::Stack { offset: _ } => todo!(),
+            },
+
+            Location::Stack { offset: _ } => todo!(),
+        }
+
+        let dest: usize = dest.into();
+        match self.locations[dest] {
+            Location::Register { register } => {
+                instructions.push(Aarch64Instruction::MovRegToReg {
+                    source: Register::X0,
+                    destination: register,
+                });
+            }
+            Location::Stack { offset: _ } => todo!(),
         }
     }
 }
@@ -453,7 +558,7 @@ mod test {
         };
 
         let machine_code = instruction.make_machine_code();
-        assert_eq!(machine_code, vec![0xE0, 0x03, 0x04, 0xAA]);
+        assert_eq!(machine_code, vec![0xE0, 0x03, 0x08, 0xAA]);
     }
 
     #[test]
@@ -466,6 +571,42 @@ mod test {
 
         let machine_code = instruction.make_machine_code();
         assert_eq!(machine_code, vec![0x20, 0x01, 0x0A, 0x8B]);
+    }
+
+    #[test]
+    fn can_encode_sub_reg_to_reg() {
+        let instruction = Aarch64Instruction::SubRegToReg {
+            destination: Register::X0,
+            reg1: Register::X9,
+            reg2: Register::X10,
+        };
+
+        let machine_code = instruction.make_machine_code();
+        assert_eq!(machine_code, vec![0x20, 0x01, 0x0A, 0xEB]);
+    }
+
+    #[test]
+    fn can_encode_mul_reg_to_reg() {
+        let instruction = Aarch64Instruction::MulRegToReg {
+            destination: Register::X0,
+            reg1: Register::X9,
+            reg2: Register::X10,
+        };
+
+        let machine_code = instruction.make_machine_code();
+        assert_eq!(machine_code, vec![0x20, 0x7D, 0x0A, 0x9B]);
+    }
+
+    #[test]
+    fn can_encode_div_reg_to_reg() {
+        let instruction = Aarch64Instruction::DivRegToReg {
+            destination: Register::X0,
+            reg1: Register::X9,
+            reg2: Register::X10,
+        };
+
+        let machine_code = instruction.make_machine_code();
+        assert_eq!(machine_code, vec![0x20, 0x0D, 0xCA, 0x9A]);
     }
 
     #[test]
