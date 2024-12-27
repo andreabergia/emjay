@@ -39,7 +39,7 @@ enum Register {
 }
 
 impl Register {
-    fn index(&self) -> u8 {
+    fn index(&self) -> u32 {
         match self {
             Register::X0 => 0,
             Register::X1 => 1,
@@ -187,7 +187,6 @@ impl Aarch64Instruction {
     const MOVK_SHIFT_16: u32 = 0xF2A00000;
     const MOVK_SHIFT_32: u32 = 0xF2C00000;
     const MOVK_SHIFT_48: u32 = 0xF2E00000;
-
     const MOV: u32 = 0xAA0003E0;
     const ADD: u32 = 0x8B000000;
     const SUBS: u32 = 0xEB000000;
@@ -204,22 +203,23 @@ impl Aarch64Instruction {
                 // trick described here:
                 // https://kddnewton.com/2022/08/11/aarch64-bitmask-immediates.html
                 // But, since this is a toy, I don't really care about efficiency. :-)
+
                 let int_value = *value as u64;
 
                 if int_value < 0xFFFF {
                     let mut i0 = Self::MOVZ;
                     i0 |= ((int_value & 0xFFFF) as u32) << 5;
-                    i0 |= register.index() as u32;
+                    i0 |= register.index();
 
                     i0.to_le_bytes().to_vec()
                 } else if int_value < 0xFFFFFFFF {
                     let mut i0 = Self::MOVZ;
                     i0 |= ((int_value & 0xFFFF) as u32) << 5;
-                    i0 |= register.index() as u32;
+                    i0 |= register.index();
 
                     let mut i1 = Self::MOVK_SHIFT_16;
                     i1 |= (((int_value >> 16) & 0xFFFF) as u32) << 5;
-                    i1 |= register.index() as u32;
+                    i1 |= register.index();
 
                     let mut v: Vec<u8> = Vec::with_capacity(8);
                     v.extend(i0.to_le_bytes());
@@ -228,15 +228,15 @@ impl Aarch64Instruction {
                 } else if int_value < 0xFFFFFFFFFFFF {
                     let mut i0: u32 = Self::MOVZ;
                     i0 |= ((int_value & 0xFFFF) as u32) << 5;
-                    i0 |= register.index() as u32;
+                    i0 |= register.index();
 
                     let mut i1 = Self::MOVK_SHIFT_16;
                     i1 |= (((int_value >> 16) & 0xFFFF) as u32) << 5;
-                    i1 |= register.index() as u32;
+                    i1 |= register.index();
 
                     let mut i2 = Self::MOVK_SHIFT_32;
                     i2 |= (((int_value >> 32) & 0xFFFF) as u32) << 5;
-                    i2 |= register.index() as u32;
+                    i2 |= register.index();
 
                     let mut v: Vec<u8> = Vec::with_capacity(12);
                     v.extend(i0.to_le_bytes());
@@ -246,19 +246,19 @@ impl Aarch64Instruction {
                 } else {
                     let mut i0: u32 = Self::MOVZ;
                     i0 |= ((int_value & 0xFFFF) as u32) << 5;
-                    i0 |= register.index() as u32;
+                    i0 |= register.index();
 
                     let mut i1 = Self::MOVK_SHIFT_16;
                     i1 |= (((int_value >> 16) & 0xFFFF) as u32) << 5;
-                    i1 |= register.index() as u32;
+                    i1 |= register.index();
 
                     let mut i2 = Self::MOVK_SHIFT_32;
                     i2 |= (((int_value >> 32) & 0xFFFF) as u32) << 5;
-                    i2 |= register.index() as u32;
+                    i2 |= register.index();
 
                     let mut i3 = Self::MOVK_SHIFT_48;
                     i3 |= (((int_value >> 48) & 0xFFFF) as u32) << 5;
-                    i3 |= register.index() as u32;
+                    i3 |= register.index();
 
                     let mut v: Vec<u8> = Vec::with_capacity(16);
                     v.extend(i0.to_le_bytes());
@@ -274,8 +274,8 @@ impl Aarch64Instruction {
                 destination,
             } => {
                 let mut i: u32 = Self::MOV;
-                i |= (source.index() as u32) << 16;
-                i |= destination.index() as u32;
+                i |= source.index() << 16;
+                i |= destination.index();
                 i.to_le_bytes().to_vec()
             }
 
@@ -312,9 +312,9 @@ impl Aarch64Instruction {
         reg2: &Register,
     ) -> Vec<u8> {
         let mut i: u32 = base;
-        i |= (reg1.index() as u32) << 5;
-        i |= (reg2.index() as u32) << 16;
-        i |= destination.index() as u32;
+        i |= reg1.index() << 5;
+        i |= reg2.index() << 16;
+        i |= destination.index();
         i.to_le_bytes().to_vec()
     }
 }
@@ -401,8 +401,6 @@ impl MachineCodeGenerator for Aarch64Generator {
                         }
                     });
                 }
-
-                _ => todo!(),
             }
         }
 
