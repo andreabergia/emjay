@@ -334,43 +334,59 @@ impl MachineCodeGenerator for Aarch64Generator {
                     instructions.push(Aarch64Instruction::Ret);
                 }
                 Instruction::Add { dest, op1, op2 } => {
-                    self.do_binop(&mut instructions, *dest, *op1, *op2, |reg1, reg2| {
-                        Aarch64Instruction::AddRegToReg {
-                            destination: Register::X0,
+                    self.do_binop(
+                        &mut instructions,
+                        *dest,
+                        *op1,
+                        *op2,
+                        |destination, reg1, reg2| Aarch64Instruction::AddRegToReg {
+                            destination,
                             reg1,
                             reg2,
-                        }
-                    });
+                        },
+                    );
                 }
 
                 Instruction::Sub { dest, op1, op2 } => {
-                    self.do_binop(&mut instructions, *dest, *op1, *op2, |reg1, reg2| {
-                        Aarch64Instruction::SubRegToReg {
-                            destination: Register::X0,
+                    self.do_binop(
+                        &mut instructions,
+                        *dest,
+                        *op1,
+                        *op2,
+                        |destination, reg1, reg2| Aarch64Instruction::SubRegToReg {
+                            destination,
                             reg1,
                             reg2,
-                        }
-                    });
+                        },
+                    );
                 }
 
                 Instruction::Mul { dest, op1, op2 } => {
-                    self.do_binop(&mut instructions, *dest, *op1, *op2, |reg1, reg2| {
-                        Aarch64Instruction::MulRegToReg {
-                            destination: Register::X0,
+                    self.do_binop(
+                        &mut instructions,
+                        *dest,
+                        *op1,
+                        *op2,
+                        |destination, reg1, reg2| Aarch64Instruction::MulRegToReg {
+                            destination,
                             reg1,
                             reg2,
-                        }
-                    });
+                        },
+                    );
                 }
 
                 Instruction::Div { dest, op1, op2 } => {
-                    self.do_binop(&mut instructions, *dest, *op1, *op2, |reg1, reg2| {
-                        Aarch64Instruction::DivRegToReg {
-                            destination: Register::X0,
+                    self.do_binop(
+                        &mut instructions,
+                        *dest,
+                        *op1,
+                        *op2,
+                        |destination, reg1, reg2| Aarch64Instruction::DivRegToReg {
+                            destination,
                             reg1,
                             reg2,
-                        }
-                    });
+                        },
+                    );
                 }
             }
         }
@@ -429,30 +445,23 @@ impl Aarch64Generator {
         dest: RegisterIndex,
         op1: RegisterIndex,
         op2: RegisterIndex,
-        callback: impl Fn(Register, Register) -> Aarch64Instruction,
+        callback: impl Fn(Register, Register, Register) -> Aarch64Instruction,
     ) {
         let op1: usize = op1.into();
         let op2: usize = op2.into();
+        let dest: usize = dest.into();
 
         match self.locations[op1] {
             Location::Register { register: reg1 } => match self.locations[op2] {
-                Location::Register { register: reg2 } => {
-                    instructions.push(callback(reg1, reg2));
-                }
+                Location::Register { register: reg2 } => match self.locations[dest] {
+                    Location::Register { register: dest } => {
+                        instructions.push(callback(dest, reg1, reg2));
+                    }
+                    Location::Stack { offset: _ } => todo!(),
+                },
+
                 Location::Stack { offset: _ } => todo!(),
             },
-
-            Location::Stack { offset: _ } => todo!(),
-        }
-
-        let dest: usize = dest.into();
-        match self.locations[dest] {
-            Location::Register { register } => {
-                instructions.push(Aarch64Instruction::MovRegToReg {
-                    source: Register::X0,
-                    destination: register,
-                });
-            }
             Location::Stack { offset: _ } => todo!(),
         }
     }
