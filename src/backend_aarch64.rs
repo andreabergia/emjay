@@ -2,6 +2,7 @@ use std::fmt::{Display, Write};
 
 use crate::{
     backend::{GeneratedMachineCode, MachineCodeGenerator},
+    backend_register_allocator::{self, AllocatedLocation},
     ir::{CompiledFunction, Instruction, RegisterIndex},
 };
 
@@ -290,15 +291,9 @@ impl Aarch64Instruction {
     }
 }
 
-#[derive(Debug, Clone)]
-enum Location {
-    Register { register: Register },
-    Stack { offset: usize },
-}
-
 #[derive(Default)]
 pub struct Aarch64Generator {
-    locations: Vec<Location>,
+    locations: Vec<AllocatedLocation<Register>>,
 }
 
 impl MachineCodeGenerator for Aarch64Generator {
@@ -311,26 +306,26 @@ impl MachineCodeGenerator for Aarch64Generator {
                 Instruction::Mvi { dest, val } => {
                     let dest: usize = (*dest).into();
                     match self.locations[dest] {
-                        Location::Register { register } => {
+                        AllocatedLocation::Register { register } => {
                             instructions.push(Aarch64Instruction::MovImmToReg {
                                 register,
                                 value: *val,
                             })
                         }
-                        Location::Stack { offset: _ } => todo!(),
+                        AllocatedLocation::Stack { offset: _ } => todo!(),
                     }
                 }
 
                 Instruction::Ret { reg } => {
                     let dest: usize = (*reg).into();
                     match self.locations[dest] {
-                        Location::Register { register } => {
+                        AllocatedLocation::Register { register } => {
                             instructions.push(Aarch64Instruction::MovRegToReg {
                                 source: register,
                                 destination: Register::X0,
                             });
                         }
-                        Location::Stack { offset: _ } => todo!(),
+                        AllocatedLocation::Stack { offset: _ } => todo!(),
                     }
                     instructions.push(Aarch64Instruction::Ret);
                 }
@@ -408,37 +403,20 @@ impl MachineCodeGenerator for Aarch64Generator {
 impl Aarch64Generator {
     // Extremely stupid algorithm - we never reuse registers!
     fn allocate_registers(&mut self, function: &CompiledFunction) {
-        self.locations.reserve(function.max_used_registers.into());
-
-        for i in 0usize..function.max_used_registers.into() {
-            let location: Location = match i {
-                0 => Location::Register {
-                    register: Register::X8,
-                },
-                1 => Location::Register {
-                    register: Register::X10,
-                },
-                2 => Location::Register {
-                    register: Register::X11,
-                },
-                3 => Location::Register {
-                    register: Register::X12,
-                },
-                4 => Location::Register {
-                    register: Register::X13,
-                },
-                5 => Location::Register {
-                    register: Register::X14,
-                },
-                6 => Location::Register {
-                    register: Register::X15,
-                },
-                _ => Location::Stack {
-                    offset: i * std::mem::size_of::<u64>(),
-                },
-            };
-            self.locations.push(location);
-        }
+        let allocations = backend_register_allocator::allocate::<Register>(
+            function,
+            vec![
+                Register::X8,
+                Register::X9,
+                Register::X10,
+                Register::X11,
+                Register::X12,
+                Register::X13,
+                Register::X14,
+                Register::X15,
+            ],
+        );
+        self.locations.extend(allocations);
     }
 
     fn do_binop(
@@ -454,17 +432,17 @@ impl Aarch64Generator {
         let dest: usize = dest.into();
 
         match self.locations[op1] {
-            Location::Register { register: reg1 } => match self.locations[op2] {
-                Location::Register { register: reg2 } => match self.locations[dest] {
-                    Location::Register { register: dest } => {
+            AllocatedLocation::Register { register: reg1 } => match self.locations[op2] {
+                AllocatedLocation::Register { register: reg2 } => match self.locations[dest] {
+                    AllocatedLocation::Register { register: dest } => {
                         instructions.push(callback(dest, reg1, reg2));
                     }
-                    Location::Stack { offset: _ } => todo!(),
+                    AllocatedLocation::Stack { offset: _ } => todo!(),
                 },
 
-                Location::Stack { offset: _ } => todo!(),
+                AllocatedLocation::Stack { offset: _ } => todo!(),
             },
-            Location::Stack { offset: _ } => todo!(),
+            AllocatedLocation::Stack { offset: _ } => todo!(),
         }
     }
 }

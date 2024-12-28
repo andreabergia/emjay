@@ -27,7 +27,7 @@ impl<'input> FunctionCompiler<'input> {
         self.compile_block(&mut body, &f.block);
         CompiledFunction {
             name: f.name,
-            max_used_registers: self.next_free_reg,
+            num_used_registers: usize::from(self.next_free_reg),
             body,
         }
     }

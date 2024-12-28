@@ -5,18 +5,6 @@ pub struct RegisterIndex {
     value: u32,
 }
 
-impl From<u32> for RegisterIndex {
-    fn from(value: u32) -> Self {
-        RegisterIndex { value }
-    }
-}
-
-impl From<RegisterIndex> for u32 {
-    fn from(value: RegisterIndex) -> Self {
-        value.value
-    }
-}
-
 impl From<RegisterIndex> for usize {
     fn from(value: RegisterIndex) -> Self {
         value.value as usize
@@ -30,6 +18,10 @@ impl fmt::Display for RegisterIndex {
 }
 
 impl RegisterIndex {
+    pub const fn from_u32(value: u32) -> Self {
+        RegisterIndex { value }
+    }
+
     pub fn inc(&mut self) -> Self {
         let prev = *self;
         self.value += 1;
@@ -70,10 +62,23 @@ pub enum Instruction {
     },
 }
 
+impl Instruction {
+    pub fn operands(&self) -> impl Iterator<Item = RegisterIndex> {
+        match self {
+            Instruction::Mvi { dest, val: _ } => vec![*dest].into_iter(),
+            Instruction::Add { dest, op1, op2 } => vec![*dest, *op1, *op2].into_iter(),
+            Instruction::Sub { dest, op1, op2 } => vec![*dest, *op1, *op2].into_iter(),
+            Instruction::Mul { dest, op1, op2 } => vec![*dest, *op1, *op2].into_iter(),
+            Instruction::Div { dest, op1, op2 } => vec![*dest, *op1, *op2].into_iter(),
+            Instruction::Ret { reg } => vec![*reg].into_iter(),
+        }
+    }
+}
+
 pub struct CompiledFunction<'input> {
     pub name: &'input str,
     pub body: Vec<Instruction>,
-    pub max_used_registers: RegisterIndex,
+    pub num_used_registers: usize,
 }
 
 impl fmt::Display for Instruction {
@@ -91,7 +96,7 @@ impl fmt::Display for Instruction {
 
 impl fmt::Display for CompiledFunction<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "fn {} - #reg: {} {{", self.name, self.max_used_registers)?;
+        writeln!(f, "fn {} - #reg: {} {{", self.name, self.num_used_registers)?;
         for (i, instr) in self.body.iter().enumerate() {
             writeln!(f, "  {:-3}:  {}", i, instr)?;
         }
