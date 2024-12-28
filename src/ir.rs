@@ -92,8 +92,8 @@ impl fmt::Display for Instruction {
 impl fmt::Display for CompiledFunction<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "fn {} - #reg: {} {{", self.name, self.max_used_registers)?;
-        for instr in &self.body {
-            writeln!(f, "    {}", instr)?;
+        for (i, instr) in self.body.iter().enumerate() {
+            writeln!(f, "  {:-3}:  {}", i, instr)?;
         }
         write!(f, "}}")
     }
