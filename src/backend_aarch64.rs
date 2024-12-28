@@ -320,6 +320,7 @@ impl MachineCodeGenerator for Aarch64Generator {
                         Location::Stack { offset: _ } => todo!(),
                     }
                 }
+
                 Instruction::Ret { reg } => {
                     let dest: usize = (*reg).into();
                     match self.locations[dest] {
@@ -333,6 +334,7 @@ impl MachineCodeGenerator for Aarch64Generator {
                     }
                     instructions.push(Aarch64Instruction::Ret);
                 }
+
                 Instruction::Add { dest, op1, op2 } => {
                     self.do_binop(
                         &mut instructions,
