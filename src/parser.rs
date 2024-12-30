@@ -11,6 +11,7 @@ fn parse_expression(rule: Pair<'_, Rule>) -> Expression {
         .map_primary(|primary| match primary.as_rule() {
             Rule::number => Expression::Number(primary.as_str().parse().unwrap()),
             Rule::identifier => Expression::Identifier(primary.as_str()),
+            Rule::expression => parse_expression(primary),
             _ => unreachable!(),
         })
         .map_prefix(|prefix, right| match prefix.as_rule() {
@@ -95,7 +96,7 @@ mod tests {
     fn can_parse_program() {
         let program = parse_program(
             r"fn foo() {
-            let x = -y + 3 * z;
+            let x = -y + 3 * (z - 1);
             {
                 let z = 42;
             }
@@ -113,7 +114,10 @@ mod tests {
                             Box::new(Expression::Negate(Box::new(Expression::Identifier("y")))),
                             Box::new(Expression::Mul(
                                 Box::new(Expression::Number(3f64)),
-                                Box::new(Expression::Identifier("z"))
+                                Box::new(Expression::Sub(
+                                    Box::new(Expression::Identifier("z")),
+                                    Box::new(Expression::Number(1f64))
+                                ))
                             ))
                         )
                     },
