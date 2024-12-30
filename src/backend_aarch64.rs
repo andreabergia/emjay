@@ -451,6 +451,7 @@ impl Aarch64Generator {
 mod test {
     use super::*;
     use crate::{frontend, parser::*};
+    use proptest::prelude::*;
 
     #[test]
     fn can_encode_move_immediate_16_bit() {
@@ -580,5 +581,35 @@ mod test {
             .machine_code
             .iter()
             .for_each(|byte| print!("{:02X} ", byte));
+    }
+
+    proptest! {
+        #[test]
+        fn mov_immediate_uses_one_instruction_for_16bit_values(n in 0..0xFFFF) {
+            let instruction = Aarch64Instruction::MovImmToReg { register: Register::X0, value: n as f64 };
+            let machine_code = instruction.make_machine_code();
+            assert_eq!(4, machine_code.len());
+        }
+
+        #[test]
+        fn mov_immediate_uses_two_instructions_for_32bit_values(n in 0x10000..0xFFFFFFFFu32) {
+            let instruction = Aarch64Instruction::MovImmToReg { register: Register::X0, value: n as f64 };
+            let machine_code = instruction.make_machine_code();
+            assert_eq!(8, machine_code.len());
+        }
+
+        #[test]
+        fn mov_immediate_uses_three_instructions_for_48bit_values(n in 0x100000000..0xFFFFFFFFFFFFu64) {
+            let instruction = Aarch64Instruction::MovImmToReg { register: Register::X0, value: n as f64 };
+            let machine_code = instruction.make_machine_code();
+            assert_eq!(12, machine_code.len());
+        }
+
+        #[test]
+        fn mov_immediate_uses_four_instructions_for_64bit_values(n in 0x1000000000000..0xFFFFFFFFFFFFFFFFu64) {
+            let instruction = Aarch64Instruction::MovImmToReg { register: Register::X0, value: n as f64 };
+            let machine_code = instruction.make_machine_code();
+            assert_eq!(16, machine_code.len());
+        }
     }
 }
