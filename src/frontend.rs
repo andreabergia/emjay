@@ -40,8 +40,11 @@ impl<'input> FunctionCompiler<'input> {
                 let reg = self.compile_expression(body, expression);
                 self.id_to_reg.insert(name, reg);
             }
-
-            BlockElement::AssignmentStatement { .. } => todo!(),
+            BlockElement::AssignmentStatement { name, expression } => {
+                // TODO: error in case identifier does not exist
+                let reg = self.compile_expression(body, expression);
+                self.id_to_reg.insert(name, reg);
+            }
             BlockElement::ReturnStatement(expression) => {
                 let reg = self.compile_expression(body, expression);
                 body.push(Instruction::Ret { reg });
@@ -111,8 +114,10 @@ mod test {
 
     #[test]
     fn can_compile_trivial_function() {
-        let program =
-            parse_program("fn the_answer() { let a = 3; let b = 4; return a * b + 1; }").unwrap();
+        let program = parse_program(
+            "fn the_answer() { let a = 3; let b = 4; let c = 0; a = c; return a * b + 1; }",
+        )
+        .unwrap();
         let compiled = compile(program);
         assert_eq!(compiled.len(), 1);
         println!("{}", compiled[0]);
