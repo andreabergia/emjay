@@ -10,6 +10,7 @@ rust-version = "1.80"
 pest = "2.7.8"
 pest_derive = "2.7.8"
 rustix = { version = "0.38.41", features = ["mm"] }
+thiserror = "2.0.9"
 
 [dev-dependencies]
 proptest = "1.6.0"

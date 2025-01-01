@@ -1,6 +1,7 @@
 use pest::error::Error;
 use pest::iterators::Pair;
 use pest::Parser;
+use thiserror::Error;
 
 use crate::ast::{Block, BlockElement, Expression, Function, Program};
 use crate::grammar::{EmjayGrammar, Rule};
@@ -12,7 +13,7 @@ fn parse_expression(rule: Pair<'_, Rule>) -> Expression {
             Rule::number => Expression::Number(primary.as_str().parse().unwrap()),
             Rule::identifier => Expression::Identifier(primary.as_str()),
             Rule::expression => parse_expression(primary),
-            _ => unreachable!(),
+            _ => unreachable!(""),
         })
         .map_prefix(|prefix, right| match prefix.as_rule() {
             Rule::neg => Expression::Negate(Box::new(right)),
@@ -69,8 +70,15 @@ fn parse_function(rule: Pair<'_, Rule>) -> Function {
     Function { name, block }
 }
 
-pub fn parse_program(program: &str) -> Result<Program, Box<Error<Rule>>> {
-    let mut parsed = EmjayGrammar::parse(Rule::program, program)?;
+#[derive(Debug, Error)]
+#[error("parse error: {wrapped}")]
+pub struct ParseError {
+    #[from]
+    wrapped: Error<Rule>,
+}
+
+pub fn parse_program(program: &str) -> Result<Program, Box<ParseError>> {
+    let mut parsed = EmjayGrammar::parse(Rule::program, program).map_err(ParseError::from)?;
     let parsed = parsed.next().unwrap();
 
     let mut functions: Program = Default::default();
@@ -130,5 +138,11 @@ mod tests {
             }],
             program
         );
+    }
+
+    #[test]
+    fn syntax_errors_are_caught() {
+        let program = parse_program(r"invalid");
+        assert!(program.is_err());
     }
 }
