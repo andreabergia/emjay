@@ -29,7 +29,7 @@ impl RegisterIndex {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Instruction {
     // Move immediate
     Mvi {
@@ -101,5 +101,31 @@ impl fmt::Display for CompiledFunction<'_> {
             writeln!(f, "  {:-3}:  {}", i, instr)?;
         }
         write!(f, "}}")
+    }
+}
+
+#[cfg(test)]
+pub mod builders {
+    use super::*;
+
+    pub fn mvi(dest: u32, val: f64) -> Instruction {
+        Instruction::Mvi {
+            dest: RegisterIndex::from_u32(dest),
+            val,
+        }
+    }
+
+    pub fn add(dest: u32, op1: u32, op2: u32) -> Instruction {
+        Instruction::Add {
+            dest: RegisterIndex::from_u32(dest),
+            op1: RegisterIndex::from_u32(op1),
+            op2: RegisterIndex::from_u32(op2),
+        }
+    }
+
+    pub fn ret(reg: u32) -> Instruction {
+        Instruction::Ret {
+            reg: RegisterIndex::from_u32(reg),
+        }
     }
 }

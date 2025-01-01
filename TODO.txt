@@ -1,0 +1,6 @@
+- [ ] proper errors
+- [ ] symbol table
+  - [ ] test nested blocks
+  - [ ] store functions
+  - [ ] add tests of undeclared identifier or double declaration
+- [ ] spans

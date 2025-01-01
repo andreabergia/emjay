@@ -176,30 +176,18 @@ where
 mod tests {
     use crate::{
         backend_register_allocator::{allocate, AllocatedLocation},
-        ir::{CompiledFunction, Instruction, RegisterIndex},
+        ir::{
+            builders::{add, mvi},
+            CompiledFunction,
+        },
     };
-
-    fn mvi(dest: u32) -> Instruction {
-        Instruction::Mvi {
-            dest: RegisterIndex::from_u32(dest),
-            val: 0.0,
-        }
-    }
-
-    fn add(dest: u32, op1: u32, op2: u32) -> Instruction {
-        Instruction::Add {
-            dest: RegisterIndex::from_u32(dest),
-            op1: RegisterIndex::from_u32(op1),
-            op2: RegisterIndex::from_u32(op2),
-        }
-    }
 
     #[test]
     fn can_allocate_and_handle_spillover() {
         let allocations = allocate(
             &CompiledFunction {
                 name: "test",
-                body: vec![mvi(0), mvi(1), add(2, 0, 1)],
+                body: vec![mvi(0, 0.0), mvi(1, 1.0), add(2, 0, 1)],
                 num_used_registers: 3,
             },
             vec!["h0"],
@@ -221,7 +209,7 @@ mod tests {
             &CompiledFunction {
                 name: "test",
                 // Register h2 is unused after instruction #2, so we can reuse it for #3
-                body: vec![mvi(0), mvi(1), mvi(2), add(3, 0, 1)],
+                body: vec![mvi(0, 0.0), mvi(1, 1.0), mvi(2, 2.0), add(3, 0, 1)],
                 num_used_registers: 4,
             },
             vec!["h0", "h1", "h2"],

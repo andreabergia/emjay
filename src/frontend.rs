@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
     ast::{Block, BlockElement, Expression, Function, Program},
@@ -9,20 +9,117 @@ pub fn compile(program: Program) -> Vec<CompiledFunction> {
     program
         .iter()
         .map(|f| {
-            let mut compiler = FunctionCompiler::default();
+            let global_symbol_table = Rc::new(RefCell::new(SymbolTable::default()));
+            let mut compiler = FunctionCompiler::new(global_symbol_table);
             compiler.compile_function(f)
         })
         .collect()
 }
 
+#[derive(Clone)]
+enum Symbol<'input> {
+    Function {
+        name: &'input str,
+    },
+    Variable {
+        name: &'input str,
+        allocated_register: RegisterIndex,
+    },
+}
+
+impl<'input> Symbol<'input> {
+    fn name(&self) -> &'input str {
+        match self {
+            Symbol::Function { name } => name,
+            Symbol::Variable { name, .. } => name,
+        }
+    }
+}
+
 #[derive(Default)]
+struct SymbolTable<'input> {
+    parent: Option<SymbolTableRef<'input>>,
+    names_to_symbols: HashMap<&'input str, Symbol<'input>>,
+}
+
+type SymbolTableRef<'input> = Rc<RefCell<SymbolTable<'input>>>;
+
+impl<'input> SymbolTable<'input> {
+    fn with_parent(parent: SymbolTableRef<'input>) -> Self {
+        Self {
+            parent: Some(parent),
+            names_to_symbols: HashMap::new(),
+        }
+    }
+
+    fn lookup(&self, name: &str) -> Option<Symbol<'input>> {
+        self.names_to_symbols.get(name).cloned().or_else(|| {
+            self.parent
+                .as_ref()
+                .and_then(|parent| parent.borrow().lookup(name))
+        })
+    }
+
+    fn put(&mut self, symbol: Symbol<'input>) {
+        let name = symbol.name();
+        self.names_to_symbols.insert(name, symbol);
+    }
+
+    fn store_location(&mut self, name: &str, register: RegisterIndex) {
+        let symbol = self.names_to_symbols.get_mut(name);
+        match symbol {
+            None => match &self.parent {
+                None => panic!("trying to overwrite undeclared identifier {}", name),
+                Some(parent) => {
+                    parent.borrow_mut().store_location(name, register);
+                }
+            },
+            Some(Symbol::Function { .. }) => panic!("cannot assign location of function {}", name),
+            Some(Symbol::Variable {
+                allocated_register, ..
+            }) => *allocated_register = register,
+        };
+    }
+}
+
 struct FunctionCompiler<'input> {
-    id_to_reg: HashMap<&'input str, RegisterIndex>,
+    curr_symbol_table: SymbolTableRef<'input>,
     next_free_reg: RegisterIndex,
 }
 
+struct SymbolTablePopper<'input, 'fc> {
+    compiler: &'fc mut FunctionCompiler<'input>,
+    prev_symbol_table: SymbolTableRef<'input>,
+}
+
+impl Drop for SymbolTablePopper<'_, '_> {
+    fn drop(&mut self) {
+        println!("dropping");
+        self.compiler.curr_symbol_table = self.prev_symbol_table.clone();
+    }
+}
+
 impl<'input> FunctionCompiler<'input> {
+    fn new(parent_symbol_table: SymbolTableRef<'input>) -> Self {
+        Self {
+            curr_symbol_table: Rc::new(RefCell::new(SymbolTable::with_parent(parent_symbol_table))),
+            next_free_reg: RegisterIndex::from_u32(0),
+        }
+    }
+
+    fn push_symbol_table<'s>(&'s mut self) -> SymbolTablePopper<'input, 's> {
+        let prev_symbol_table = self.curr_symbol_table.clone();
+        self.curr_symbol_table = Rc::new(RefCell::new(SymbolTable::with_parent(
+            prev_symbol_table.clone(),
+        )));
+        SymbolTablePopper {
+            compiler: self,
+            prev_symbol_table,
+        }
+    }
+
     fn compile_function(&mut self, f: &Function<'input>) -> CompiledFunction<'input> {
+        self.push_symbol_table();
         let mut body: Vec<Instruction> = Vec::new();
         self.compile_block(&mut body, &f.block);
         CompiledFunction {
@@ -33,17 +130,39 @@ impl<'input> FunctionCompiler<'input> {
     }
 
     fn compile_block(&mut self, body: &mut Vec<Instruction>, block: &Block<'input>) {
+        self.push_symbol_table();
         block.iter().for_each(|element| match element {
             BlockElement::NestedBlock(nested) => self.compile_block(body, nested),
             BlockElement::LetStatement { name, expression } => {
-                // TODO: error in case identifier exists
+                // TODO: check symbol does not exist
                 let reg = self.compile_expression(body, expression);
-                self.id_to_reg.insert(name, reg);
+                self.curr_symbol_table.borrow_mut().put(Symbol::Variable {
+                    name,
+                    allocated_register: reg,
+                });
             }
             BlockElement::AssignmentStatement { name, expression } => {
-                // TODO: error in case identifier does not exist
-                let reg = self.compile_expression(body, expression);
-                self.id_to_reg.insert(name, reg);
+                let existing_symbol = self.curr_symbol_table.borrow_mut().lookup(name);
+                match existing_symbol {
+                    None => {
+                        // TODO: proper error
+                        panic!("trying to assign to undeclared identifier {}", name)
+                    }
+                    Some(symbol) => {
+                        match symbol {
+                            Symbol::Function { .. } => {
+                                // TODO: proper error
+                                panic!("cannot assign value to function {}", name)
+                            }
+                            Symbol::Variable { .. } => {
+                                let reg = self.compile_expression(body, expression);
+                                self.curr_symbol_table
+                                    .borrow_mut()
+                                    .store_location(name, reg);
+                            }
+                        }
+                    }
+                }
             }
             BlockElement::ReturnStatement(expression) => {
                 let reg = self.compile_expression(body, expression);
@@ -60,8 +179,16 @@ impl<'input> FunctionCompiler<'input> {
         match expression {
             Expression::Identifier(id) => {
                 // TODO: proper error
-                let reg_with_value = self.id_to_reg.get(id).expect("using undeclared identifier");
-                *reg_with_value
+                let symbol = self.curr_symbol_table.borrow().lookup(id);
+                match symbol {
+                    None => panic!("undeclared identifier {}", id),
+                    Some(Symbol::Function { .. }) => {
+                        panic!("function {} is not a valid variable name", id)
+                    }
+                    Some(Symbol::Variable {
+                        allocated_register, ..
+                    }) => allocated_register,
+                }
             }
             Expression::Number(n) => {
                 let reg = self.allocate_reg();
@@ -110,16 +237,32 @@ impl<'input> FunctionCompiler<'input> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::parser::*;
+    use crate::{
+        ir::builders::{add, mvi, ret},
+        parser::*,
+    };
 
     #[test]
-    fn can_compile_trivial_function() {
-        let program = parse_program(
-            "fn the_answer() { let a = 3; let b = 4; let c = 0; a = c; return a * b + 1; }",
-        )
-        .unwrap();
+    fn can_compile_variable_declaration_and_math() {
+        let program = parse_program("fn the_answer() { let a = 3; return a + 1; }").unwrap();
         let compiled = compile(program);
         assert_eq!(compiled.len(), 1);
-        println!("{}", compiled[0]);
+
+        let f = &compiled[0];
+        assert_eq!(f.name, "the_answer");
+        assert_eq!(f.num_used_registers, 3);
+        assert_eq!(f.body, vec![mvi(0, 3.0), mvi(1, 1.0), add(2, 0, 1), ret(2)]);
+    }
+
+    #[test]
+    fn can_compile_assignments() {
+        let program = parse_program("fn the_answer() { let a = 1; a = 2; return a; }").unwrap();
+        let compiled = compile(program);
+        assert_eq!(compiled.len(), 1);
+
+        let f = &compiled[0];
+        assert_eq!(f.name, "the_answer");
+        assert_eq!(f.num_used_registers, 2);
+        assert_eq!(f.body, vec![mvi(0, 1.0), mvi(1, 2.0), ret(1)]);
     }
 }
