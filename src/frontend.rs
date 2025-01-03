@@ -1,17 +1,33 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
+use thiserror::Error;
+
 use crate::{
     ast::{Block, BlockElement, Expression, Function, Program},
     ir::{CompiledFunction, Instruction, RegisterIndex},
 };
 
-pub fn compile(program: Program) -> Vec<CompiledFunction> {
+#[derive(Debug, Error)]
+pub enum FrontendError {
+    #[error("variable \"{name}\" not defined")]
+    VariableNotDefined {
+        name: String,
+        // TODO: location: SourceLocation,
+    },
+    #[error("variable \"{name}\" already defined")]
+    VariableAlreadyDefined {
+        name: String,
+        // TODO: location: SourceLocation,
+    },
+}
+
+pub fn compile(program: Program) -> Result<Vec<CompiledFunction>, FrontendError> {
     program
         .iter()
         .map(|f| {
-            let global_symbol_table = Rc::new(RefCell::new(SymbolTable::default()));
-            let mut compiler = FunctionCompiler::new(global_symbol_table);
-            compiler.compile_function(f)
+            let global_symbol_table = SymbolTable::new();
+            let mut compiler = FunctionCompiler::default();
+            compiler.compile_function(f, global_symbol_table)
         })
         .collect()
 }
@@ -38,18 +54,22 @@ impl<'input> Symbol<'input> {
 
 #[derive(Default)]
 struct SymbolTable<'input> {
-    parent: Option<SymbolTableRef<'input>>,
+    parent: Option<Rc<RefCell<SymbolTable<'input>>>>,
     names_to_symbols: HashMap<&'input str, Symbol<'input>>,
 }
 
 type SymbolTableRef<'input> = Rc<RefCell<SymbolTable<'input>>>;
 
 impl<'input> SymbolTable<'input> {
-    fn with_parent(parent: SymbolTableRef<'input>) -> Self {
-        Self {
+    fn new() -> SymbolTableRef<'input> {
+        Rc::new(RefCell::new(SymbolTable::default()))
+    }
+
+    fn with_parent(parent: SymbolTableRef<'input>) -> SymbolTableRef<'input> {
+        Rc::new(RefCell::new(Self {
             parent: Some(parent),
             names_to_symbols: HashMap::new(),
-        }
+        }))
     }
 
     fn lookup(&self, name: &str) -> Option<Symbol<'input>> {
@@ -65,6 +85,7 @@ impl<'input> SymbolTable<'input> {
         self.names_to_symbols.insert(name, symbol);
     }
 
+    // TODO: we shouldn't need two lookups in the table
     fn store_location(&mut self, name: &str, register: RegisterIndex) {
         let symbol = self.names_to_symbols.get_mut(name);
         match symbol {
@@ -82,147 +103,127 @@ impl<'input> SymbolTable<'input> {
     }
 }
 
-struct FunctionCompiler<'input> {
-    curr_symbol_table: SymbolTableRef<'input>,
+#[derive(Default)]
+struct FunctionCompiler {
     next_free_reg: RegisterIndex,
 }
 
-struct SymbolTablePopper<'input, 'fc> {
-    compiler: &'fc mut FunctionCompiler<'input>,
-    prev_symbol_table: SymbolTableRef<'input>,
-}
-
-impl Drop for SymbolTablePopper<'_, '_> {
-    fn drop(&mut self) {
-        println!("dropping");
-        self.compiler.curr_symbol_table = self.prev_symbol_table.clone();
-    }
-}
-
-impl<'input> FunctionCompiler<'input> {
-    fn new(parent_symbol_table: SymbolTableRef<'input>) -> Self {
-        Self {
-            curr_symbol_table: Rc::new(RefCell::new(SymbolTable::with_parent(parent_symbol_table))),
-            next_free_reg: RegisterIndex::from_u32(0),
-        }
-    }
-
-    fn push_symbol_table<'s>(&'s mut self) -> SymbolTablePopper<'input, 's> {
-        let prev_symbol_table = self.curr_symbol_table.clone();
-        self.curr_symbol_table = Rc::new(RefCell::new(SymbolTable::with_parent(
-            prev_symbol_table.clone(),
-        )));
-        SymbolTablePopper {
-            compiler: self,
-            prev_symbol_table,
-        }
-    }
-
-    fn compile_function(&mut self, f: &Function<'input>) -> CompiledFunction<'input> {
-        self.push_symbol_table();
+impl<'input> FunctionCompiler {
+    fn compile_function(
+        &mut self,
+        f: &Function<'input>,
+        parent_symbol_table: SymbolTableRef<'input>,
+    ) -> Result<CompiledFunction<'input>, FrontendError> {
+        let symbol_table = SymbolTable::with_parent(parent_symbol_table);
         let mut body: Vec<Instruction> = Vec::new();
-        self.compile_block(&mut body, &f.block);
-        CompiledFunction {
+        self.compile_block(&mut body, &f.block, symbol_table)?;
+        Ok(CompiledFunction {
             name: f.name,
             num_used_registers: usize::from(self.next_free_reg),
             body,
-        }
+        })
     }
 
-    fn compile_block(&mut self, body: &mut Vec<Instruction>, block: &Block<'input>) {
-        self.push_symbol_table();
-        block.iter().for_each(|element| match element {
-            BlockElement::NestedBlock(nested) => self.compile_block(body, nested),
-            BlockElement::LetStatement { name, expression } => {
-                // TODO: check symbol does not exist
-                let reg = self.compile_expression(body, expression);
-                self.curr_symbol_table.borrow_mut().put(Symbol::Variable {
-                    name,
-                    allocated_register: reg,
-                });
-            }
-            BlockElement::AssignmentStatement { name, expression } => {
-                let existing_symbol = self.curr_symbol_table.borrow_mut().lookup(name);
-                match existing_symbol {
-                    None => {
-                        // TODO: proper error
-                        panic!("trying to assign to undeclared identifier {}", name)
+    fn compile_block(
+        &mut self,
+        body: &mut Vec<Instruction>,
+        block: &Block<'input>,
+        parent_symbol_table: SymbolTableRef<'input>,
+    ) -> Result<(), FrontendError> {
+        let symbol_table = SymbolTable::with_parent(parent_symbol_table);
+        println!("compiling block: {:?}", block);
+        for element in block.iter() {
+            match element {
+                BlockElement::NestedBlock(nested) => {
+                    self.compile_block(body, nested, symbol_table.clone())?
+                }
+                BlockElement::LetStatement { name, expression } => {
+                    if let Some(Symbol::Variable { .. }) = symbol_table.borrow().lookup(name) {
+                        return Err(FrontendError::VariableAlreadyDefined {
+                            name: name.to_string(),
+                        });
                     }
-                    Some(symbol) => {
-                        match symbol {
-                            Symbol::Function { .. } => {
-                                // TODO: proper error
-                                panic!("cannot assign value to function {}", name)
-                            }
-                            Symbol::Variable { .. } => {
-                                let reg = self.compile_expression(body, expression);
-                                self.curr_symbol_table
-                                    .borrow_mut()
-                                    .store_location(name, reg);
-                            }
-                        }
+                    let reg = self.compile_expression(body, expression, symbol_table.clone())?;
+                    symbol_table.borrow_mut().put(Symbol::Variable {
+                        name,
+                        allocated_register: reg,
+                    });
+                }
+                BlockElement::AssignmentStatement { name, expression } => {
+                    let existing_symbol = symbol_table.borrow().lookup(name);
+                    if let Some(Symbol::Variable { .. }) = existing_symbol {
+                        let reg =
+                            self.compile_expression(body, expression, symbol_table.clone())?;
+                        symbol_table.borrow_mut().store_location(name, reg);
+                    } else {
+                        return Err(FrontendError::VariableNotDefined {
+                            name: name.to_string(),
+                        });
                     }
                 }
+                BlockElement::ReturnStatement(expression) => {
+                    let reg = self.compile_expression(body, expression, symbol_table.clone())?;
+                    body.push(Instruction::Ret { reg });
+                }
             }
-            BlockElement::ReturnStatement(expression) => {
-                let reg = self.compile_expression(body, expression);
-                body.push(Instruction::Ret { reg });
-            }
-        })
+        }
+        Ok(())
     }
 
     fn compile_expression(
         &mut self,
         body: &mut Vec<Instruction>,
         expression: &Expression,
-    ) -> RegisterIndex {
+        symbol_table: SymbolTableRef<'input>,
+    ) -> Result<RegisterIndex, FrontendError> {
         match expression {
-            Expression::Identifier(id) => {
+            Expression::Identifier(name) => {
                 // TODO: proper error
-                let symbol = self.curr_symbol_table.borrow().lookup(id);
-                match symbol {
-                    None => panic!("undeclared identifier {}", id),
-                    Some(Symbol::Function { .. }) => {
-                        panic!("function {} is not a valid variable name", id)
-                    }
-                    Some(Symbol::Variable {
-                        allocated_register, ..
-                    }) => allocated_register,
+                let symbol = symbol_table.borrow().lookup(name);
+                if let Some(Symbol::Variable {
+                    allocated_register, ..
+                }) = symbol
+                {
+                    Ok(allocated_register)
+                } else {
+                    Err(FrontendError::VariableNotDefined {
+                        name: name.to_string(),
+                    })
                 }
             }
             Expression::Number(n) => {
                 let reg = self.allocate_reg();
                 body.push(Instruction::Mvi { dest: reg, val: *n });
-                reg
+                Ok(reg)
             }
             Expression::Negate(_) => todo!(),
             Expression::Add(left, right) => {
-                let op1 = self.compile_expression(body, left);
-                let op2 = self.compile_expression(body, right);
+                let op1 = self.compile_expression(body, left, symbol_table.clone())?;
+                let op2 = self.compile_expression(body, right, symbol_table)?;
                 let dest = self.allocate_reg();
                 body.push(Instruction::Add { dest, op1, op2 });
-                dest
+                Ok(dest)
             }
             Expression::Sub(left, right) => {
-                let op1 = self.compile_expression(body, left);
-                let op2 = self.compile_expression(body, right);
+                let op1 = self.compile_expression(body, left, symbol_table.clone())?;
+                let op2 = self.compile_expression(body, right, symbol_table)?;
                 let dest = self.allocate_reg();
                 body.push(Instruction::Sub { dest, op1, op2 });
-                dest
+                Ok(dest)
             }
             Expression::Mul(left, right) => {
-                let op1 = self.compile_expression(body, left);
-                let op2 = self.compile_expression(body, right);
+                let op1 = self.compile_expression(body, left, symbol_table.clone())?;
+                let op2 = self.compile_expression(body, right, symbol_table)?;
                 let dest = self.allocate_reg();
                 body.push(Instruction::Mul { dest, op1, op2 });
-                dest
+                Ok(dest)
             }
             Expression::Div(left, right) => {
-                let op1 = self.compile_expression(body, left);
-                let op2 = self.compile_expression(body, right);
+                let op1 = self.compile_expression(body, left, symbol_table.clone())?;
+                let op2 = self.compile_expression(body, right, symbol_table)?;
                 let dest = self.allocate_reg();
                 body.push(Instruction::Div { dest, op1, op2 });
-                dest
+                Ok(dest)
             }
 
             _ => todo!(),
@@ -245,7 +246,7 @@ mod test {
     #[test]
     fn can_compile_variable_declaration_and_math() {
         let program = parse_program("fn the_answer() { let a = 3; return a + 1; }").unwrap();
-        let compiled = compile(program);
+        let compiled = compile(program).unwrap();
         assert_eq!(compiled.len(), 1);
 
         let f = &compiled[0];
@@ -256,13 +257,88 @@ mod test {
 
     #[test]
     fn can_compile_assignments() {
-        let program = parse_program("fn the_answer() { let a = 1; a = 2; return a; }").unwrap();
-        let compiled = compile(program);
+        let program = parse_program(
+            r"fn the_answer() { 
+                let a = 1; 
+                {
+                    a = 2; 
+                }
+                return a;
+            }",
+        )
+        .unwrap();
+        let compiled = compile(program).unwrap();
         assert_eq!(compiled.len(), 1);
 
         let f = &compiled[0];
         assert_eq!(f.name, "the_answer");
         assert_eq!(f.num_used_registers, 2);
         assert_eq!(f.body, vec![mvi(0, 1.0), mvi(1, 2.0), ret(1)]);
+    }
+
+    #[test]
+    fn can_refer_to_outside_variable_from_nested_block() {
+        let program = parse_program(
+            r"fn the_answer() {
+                let a = 1;
+                {
+                    return a;
+                }
+            }",
+        )
+        .unwrap();
+        let compiled = compile(program).unwrap();
+        assert_eq!(compiled.len(), 1);
+
+        let f = &compiled[0];
+        assert_eq!(f.name, "the_answer");
+        assert_eq!(f.num_used_registers, 1);
+        assert_eq!(f.body, vec![mvi(0, 1.0), ret(0)]);
+    }
+
+    #[test]
+    fn compile_error_undeclared_variable() {
+        let program = parse_program("fn f() { return a; }").unwrap();
+        let error = compile(program).unwrap_err();
+        assert_eq!(error.to_string(), "variable \"a\" not defined");
+    }
+
+    #[test]
+    fn compile_error_double_variable_declaration() {
+        let program = parse_program("fn f() { let a = 1; let a = 2; }").unwrap();
+        let error = compile(program).unwrap_err();
+        assert_eq!(error.to_string(), "variable \"a\" already defined");
+    }
+
+    #[test]
+    fn compile_error_variable_declared_in_nested_block() {
+        let program = parse_program(
+            r"fn f() {
+            {
+                let a = 1;
+            }
+            return a;
+        }",
+        )
+        .unwrap();
+        let error = compile(program).unwrap_err();
+        assert_eq!(error.to_string(), "variable \"a\" not defined");
+    }
+
+    // TODO: maybe this should be allowed?
+    #[test]
+    fn compile_error_variable_cannot_be_shadowed_in_nesterd_block() {
+        let program = parse_program(
+            r"fn f() {
+            let a = 1;
+            {
+                let a = 2;
+            }
+            return a;
+        }",
+        )
+        .unwrap();
+        let error = compile(program).unwrap_err();
+        assert_eq!(error.to_string(), "variable \"a\" already defined");
     }
 }

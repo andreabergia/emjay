@@ -7,7 +7,11 @@ use crate::backend_aarch64::Aarch64Generator;
 #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
 use crate::backend_x64_linux::X64LinuxGenerator;
 
-use crate::{backend::MachineCodeGenerator, frontend, parser};
+use crate::{
+    backend::MachineCodeGenerator,
+    frontend::{self, FrontendError},
+    parser,
+};
 
 pub fn to_function_pointer(bytes: &[u8]) -> fn() -> i64 {
     #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
@@ -54,6 +58,8 @@ pub fn to_function_pointer(bytes: &[u8]) -> fn() -> i64 {
 pub enum JitError {
     #[error("{0}")]
     ParseError(#[from] Box<parser::ParseError>),
+    #[error("{0}")]
+    FrontendError(#[from] FrontendError),
 }
 
 pub fn jit_compile_fn(source: &str) -> Result<fn() -> i64, JitError> {
@@ -62,7 +68,7 @@ pub fn jit_compile_fn(source: &str) -> Result<fn() -> i64, JitError> {
     println!();
 
     let program = parser::parse_program(source)?;
-    let compiled = frontend::compile(program);
+    let compiled = frontend::compile(program)?;
     assert_eq!(compiled.len(), 1);
     println!("ir:");
     println!("{}", compiled[0]);

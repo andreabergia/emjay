@@ -75,6 +75,7 @@ impl Instruction {
     }
 }
 
+#[derive(Debug)]
 pub struct CompiledFunction<'input> {
     pub name: &'input str,
     pub body: Vec<Instruction>,

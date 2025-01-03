@@ -1,6 +1,7 @@
 - [ ] proper errors
 - [ ] symbol table
-  - [ ] test nested blocks
+  - [x] test nested blocks
   - [ ] store functions
-  - [ ] add tests of undeclared identifier or double declaration
+  - [x] add tests of undeclared identifier or double declaration
 - [ ] spans
+- [ ] expressions and not statements
