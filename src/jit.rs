@@ -71,11 +71,11 @@ unsafe fn to_function_pointer(bytes: &[u8]) -> Result<fn() -> i64, MmapError> {
 #[derive(Debug, Error)]
 pub enum JitError {
     #[error("{0}")]
-    ParseError(#[from] Box<parser::ParseError>),
+    Parser(#[from] Box<parser::ParseError>),
     #[error("{0}")]
-    FrontendError(#[from] FrontendError),
+    Frontend(#[from] FrontendError),
     #[error("{0}")]
-    JitError(#[from] MmapError),
+    Jit(#[from] MmapError),
 }
 
 pub fn jit_compile_fn(source: &str) -> Result<fn() -> i64, JitError> {
@@ -129,6 +129,6 @@ mod tests {
     fn syntax_errors_are_handled() {
         let source = "fn invalid";
         let err = super::jit_compile_fn(source).expect_err("should have not compiled");
-        assert!(matches!(err, JitError::ParseError(_)));
+        assert!(matches!(err, JitError::Parser(_)));
     }
 }
