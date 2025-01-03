@@ -13,44 +13,58 @@ use crate::{
     parser,
 };
 
-pub fn to_function_pointer(bytes: &[u8]) -> fn() -> i64 {
+#[derive(Debug, Error)]
+#[error("{description} (errno: {errno})")]
+pub struct MmapError {
+    description: String,
+    errno: i32,
+}
+
+impl From<rustix::io::Errno> for MmapError {
+    fn from(value: rustix::io::Errno) -> Self {
+        Self {
+            description: format!("mmap failed with error: {}", value),
+            errno: value.raw_os_error(),
+        }
+    }
+}
+
+unsafe fn to_function_pointer(bytes: &[u8]) -> Result<fn() -> i64, MmapError> {
     #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
-    unsafe {
+    {
         let size = bytes.len();
         let map = mmap_anonymous(
             std::ptr::null_mut(),
             size,
             ProtFlags::WRITE | ProtFlags::EXEC,
             MapFlags::PRIVATE,
-        )
-        .unwrap();
+        )?;
 
         println!("mmapped address: {:?}", map);
         std::ptr::copy_nonoverlapping(bytes.as_ptr(), map as *mut u8, size);
 
         let f: fn() -> i64 = std::mem::transmute(map);
-        f
+        Ok(f)
     }
 
     #[cfg(all(target_arch = "aarch64", target_os = "macos"))]
-    unsafe {
+    {
         let size = bytes.len();
         let map = mmap_anonymous(
             std::ptr::null_mut(),
             size,
             ProtFlags::WRITE,
             MapFlags::PRIVATE,
-        )
-        .unwrap();
+        )?;
 
         println!("mmapped address: {:?}", map);
         std::ptr::copy_nonoverlapping(bytes.as_ptr(), map as *mut u8, size);
 
-        mprotect(map, size, MprotectFlags::EXEC).unwrap();
+        mprotect(map, size, MprotectFlags::EXEC)?;
         println!("mprotected: {:?}", map);
 
         let f: fn() -> i64 = std::mem::transmute(map);
-        f
+        Ok(f)
     }
 }
 
@@ -60,6 +74,8 @@ pub enum JitError {
     ParseError(#[from] Box<parser::ParseError>),
     #[error("{0}")]
     FrontendError(#[from] FrontendError),
+    #[error("{0}")]
+    JitError(#[from] MmapError),
 }
 
 pub fn jit_compile_fn(source: &str) -> Result<fn() -> i64, JitError> {
@@ -93,7 +109,8 @@ pub fn jit_compile_fn(source: &str) -> Result<fn() -> i64, JitError> {
     println!();
     println!();
 
-    Ok(to_function_pointer(&machine_code.machine_code))
+    let f = unsafe { to_function_pointer(&machine_code.machine_code)? };
+    Ok(f)
 }
 
 #[cfg(test)]
