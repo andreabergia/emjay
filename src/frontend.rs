@@ -239,29 +239,44 @@ impl<'input> FunctionCompiler {
 mod test {
     use super::*;
     use crate::{
-        ir::builders::{add, mvi, ret},
+        ir::builders::{add, div, mul, mvi, ret, sub},
         parser::*,
     };
 
     #[test]
     fn can_compile_variable_declaration_and_math() {
-        let program = parse_program("fn the_answer() { let a = 3; return a + 1; }").unwrap();
+        let program =
+            parse_program("fn the_answer() { let a = 3; return a + 1 - 2 * 3 / 4; }").unwrap();
         let compiled = compile(program).unwrap();
         assert_eq!(compiled.len(), 1);
 
         let f = &compiled[0];
         assert_eq!(f.name, "the_answer");
-        assert_eq!(f.num_used_registers, 3);
-        assert_eq!(f.body, vec![mvi(0, 3.0), mvi(1, 1.0), add(2, 0, 1), ret(2)]);
+        assert_eq!(f.num_used_registers, 9);
+        assert_eq!(
+            f.body,
+            vec![
+                mvi(0, 3.0),
+                mvi(1, 1.0),
+                add(2, 0, 1),
+                mvi(3, 2.0),
+                mvi(4, 3.0),
+                mul(5, 3, 4),
+                mvi(6, 4.0),
+                div(7, 5, 6),
+                sub(8, 2, 7),
+                ret(8),
+            ]
+        );
     }
 
     #[test]
     fn can_compile_assignments() {
         let program = parse_program(
-            r"fn the_answer() { 
-                let a = 1; 
+            r"fn the_answer() {
+                let a = 1;
                 {
-                    a = 2; 
+                    a = 2;
                 }
                 return a;
             }",
@@ -297,8 +312,15 @@ mod test {
     }
 
     #[test]
-    fn compile_error_undeclared_variable() {
+    fn compile_error_return_undeclared_variable() {
         let program = parse_program("fn f() { return a; }").unwrap();
+        let error = compile(program).unwrap_err();
+        assert_eq!(error.to_string(), "variable \"a\" not defined");
+    }
+
+    #[test]
+    fn compile_error_assign_to_undeclared_variable() {
+        let program = parse_program("fn f() { a = 1; }").unwrap();
         let error = compile(program).unwrap_err();
         assert_eq!(error.to_string(), "variable \"a\" not defined");
     }

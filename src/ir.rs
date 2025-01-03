@@ -124,6 +124,30 @@ pub mod builders {
         }
     }
 
+    pub fn sub(dest: u32, op1: u32, op2: u32) -> Instruction {
+        Instruction::Sub {
+            dest: RegisterIndex::from_u32(dest),
+            op1: RegisterIndex::from_u32(op1),
+            op2: RegisterIndex::from_u32(op2),
+        }
+    }
+
+    pub fn mul(dest: u32, op1: u32, op2: u32) -> Instruction {
+        Instruction::Mul {
+            dest: RegisterIndex::from_u32(dest),
+            op1: RegisterIndex::from_u32(op1),
+            op2: RegisterIndex::from_u32(op2),
+        }
+    }
+
+    pub fn div(dest: u32, op1: u32, op2: u32) -> Instruction {
+        Instruction::Div {
+            dest: RegisterIndex::from_u32(dest),
+            op1: RegisterIndex::from_u32(op1),
+            op2: RegisterIndex::from_u32(op2),
+        }
+    }
+
     pub fn ret(reg: u32) -> Instruction {
         Instruction::Ret {
             reg: RegisterIndex::from_u32(reg),
