@@ -4,10 +4,8 @@ use jit::jit_compile_fn;
 
 mod ast;
 mod backend;
-#[cfg(target_arch = "aarch64")]
 mod backend_aarch64;
 mod backend_register_allocator;
-#[cfg(all(target_arch = "x86_64", target_os = "linux"))]
 mod backend_x64_linux;
 mod frontend;
 mod grammar;

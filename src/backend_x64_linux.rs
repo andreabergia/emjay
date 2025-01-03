@@ -250,7 +250,7 @@ mod test {
     #[test]
     fn can_compile_trivial_function() {
         let program = parse_program("fn the_answer() { let a = 42; return a + 1; }").unwrap();
-        let compiled = frontend::compile(program);
+        let compiled = frontend::compile(program).unwrap();
         assert_eq!(compiled.len(), 1);
 
         let mut gen = X64LinuxGenerator::default();

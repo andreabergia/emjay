@@ -2,9 +2,9 @@
 use rustix::mm::{mmap_anonymous, mprotect, MapFlags, MprotectFlags, ProtFlags};
 use thiserror::Error;
 
-#[cfg(target_arch = "aarch64")]
+#[allow(unused)]
 use crate::backend_aarch64::Aarch64Generator;
-#[cfg(all(target_arch = "x86_64", target_os = "linux"))]
+#[allow(unused)]
 use crate::backend_x64_linux::X64LinuxGenerator;
 
 use crate::{
@@ -75,7 +75,7 @@ pub enum JitError {
     #[error("{0}")]
     Frontend(#[from] FrontendError),
     #[error("{0}")]
-    Jit(#[from] MmapError),
+    Ji(#[from] MmapError),
 }
 
 pub fn jit_compile_fn(source: &str) -> Result<fn() -> i64, JitError> {
