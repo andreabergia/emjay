@@ -1,10 +1,8 @@
-use std::{
-    collections::HashMap,
-    fmt::{Display, Write},
-};
+use std::fmt::{Display, Write};
 
 use crate::{
     backend::{GeneratedMachineCode, MachineCodeGenerator},
+    backend_register_allocator::{self, AllocatedLocation},
     ir::{CompiledFunction, RegisterIndex},
 };
 
@@ -95,8 +93,10 @@ impl X64Instruction {
             X64Instruction::Push { register } => vec![0x50 + register.index()],
             X64Instruction::Pop { register } => vec![0x58 + register.index()],
             X64Instruction::MovImmToReg { register, value } => {
-                let mut vec = vec![0xB8 + register.index()];
+                let mut vec = vec![0x48, 0xB8 + register.index()];
+                println!("vec : {:?}", vec);
                 vec.extend_from_slice(&(*value as i64).to_le_bytes());
+                println!("vec : {:?}", vec);
                 vec
             }
             X64Instruction::MovRegToReg {
@@ -118,35 +118,21 @@ impl X64Instruction {
             (Register::Rcx, Register::Rax) => 0xC8,
             (Register::Rdx, Register::Rax) => 0xD0,
 
-            (Register::Rsp, Register::Rbp) => 0xEC,
-            (Register::Rbp, Register::Rsp) => 0xE5,
+            (Register::Rsp, Register::Rbp) => 0xE5,
+            (Register::Rbp, Register::Rsp) => 0xEC,
             _ => panic!("unimplemented {} -> {}", source, destination),
-        }
-    }
-}
-
-enum Location {
-    Register { register: Register },
-    Stack { offset: usize },
-}
-
-impl Display for Location {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Location::Register { register: reg } => write!(f, "{}", reg),
-            Location::Stack { offset } => write!(f, "rsp[{}]", offset),
         }
     }
 }
 
 #[derive(Default)]
 pub struct X64LinuxGenerator {
-    locations: HashMap<RegisterIndex, Location>,
+    locations: Vec<AllocatedLocation<Register>>,
 }
 
 impl MachineCodeGenerator for X64LinuxGenerator {
     fn generate_machine_code(&mut self, function: &CompiledFunction) -> GeneratedMachineCode {
-        self.assign_locations(function);
+        self.allocate_registers(function);
 
         let mut instructions = Vec::new();
 
@@ -154,19 +140,19 @@ impl MachineCodeGenerator for X64LinuxGenerator {
             register: Register::Rbp,
         });
         instructions.push(X64Instruction::MovRegToReg {
-            source: Register::Rbp,
-            destination: Register::Rsp,
+            source: Register::Rsp,
+            destination: Register::Rbp,
         });
 
         for instruction in function.body.iter() {
             match instruction {
                 crate::ir::Instruction::Mvi { dest, val } => {
-                    let loc = self.locations.get(dest).unwrap();
-                    match loc {
-                        Location::Stack { .. } => todo!(),
-                        Location::Register { register } => {
+                    let dest: usize = (*dest).into();
+                    match self.locations[dest] {
+                        AllocatedLocation::Stack { .. } => todo!(),
+                        AllocatedLocation::Register { register } => {
                             instructions.push(X64Instruction::MovImmToReg {
-                                register: *register,
+                                register,
                                 value: *val,
                             })
                         }
@@ -206,51 +192,24 @@ impl MachineCodeGenerator for X64LinuxGenerator {
 }
 
 impl X64LinuxGenerator {
-    fn assign_locations(&mut self, function: &CompiledFunction) {
-        for i in 0..function.max_used_registers.into() {
-            match i {
-                0 => self.locations.insert(
-                    RegisterIndex::from(i),
-                    Location::Register {
-                        register: Register::Rcx,
-                    },
-                ),
-                1 => self.locations.insert(
-                    RegisterIndex::from(i),
-                    Location::Register {
-                        register: Register::Rdx,
-                    },
-                ),
-                2 => self.locations.insert(
-                    RegisterIndex::from(i),
-                    Location::Register {
-                        register: Register::Rbx,
-                    },
-                ),
-                3 => self.locations.insert(
-                    RegisterIndex::from(i),
-                    Location::Register {
-                        register: Register::Rsi,
-                    },
-                ),
-                n => self.locations.insert(
-                    RegisterIndex::from(i),
-                    Location::Stack {
-                        offset: ((n as usize) - 3) * NUM_SIZE,
-                    },
-                ),
-            };
-        }
+    fn allocate_registers(&mut self, function: &CompiledFunction) {
+        let allocations = backend_register_allocator::allocate::<Register>(
+            function,
+            vec![Register::Rcx, Register::Rdx, Register::Rbx, Register::Rsi],
+        );
+        self.locations.extend(allocations);
     }
 
     fn move_to_accumulator(&mut self, reg: &RegisterIndex, instructions: &mut Vec<X64Instruction>) {
-        let loc = self.locations.get(reg).unwrap();
-        match loc {
-            Location::Register { register } => instructions.push(X64Instruction::MovRegToReg {
-                source: *register,
-                destination: Register::Rax,
-            }),
-            Location::Stack { .. } => todo!(),
+        let reg: usize = (*reg).into();
+        match self.locations[reg] {
+            AllocatedLocation::Register { register } => {
+                instructions.push(X64Instruction::MovRegToReg {
+                    source: register,
+                    destination: Register::Rax,
+                })
+            }
+            AllocatedLocation::Stack { .. } => todo!(),
         }
     }
 
@@ -264,19 +223,21 @@ impl X64LinuxGenerator {
     ) {
         self.move_to_accumulator(op1, instructions);
 
-        let loc2 = self.locations.get(op2).unwrap();
-        match loc2 {
-            Location::Stack { .. } => todo!(),
-            Location::Register { register } => instructions.push(lambda(*register)),
+        let op2: usize = (*op2).into();
+        match self.locations[op2] {
+            AllocatedLocation::Stack { .. } => todo!(),
+            AllocatedLocation::Register { register } => instructions.push(lambda(register)),
         }
 
-        let loc_dest = self.locations.get(dest).unwrap();
-        match loc_dest {
-            Location::Register { register } => instructions.push(X64Instruction::MovRegToReg {
-                source: Register::Rax,
-                destination: *register,
-            }),
-            Location::Stack { .. } => todo!(),
+        let dest: usize = (*dest).into();
+        match self.locations[dest] {
+            AllocatedLocation::Register { register } => {
+                instructions.push(X64Instruction::MovRegToReg {
+                    source: Register::Rax,
+                    destination: register,
+                })
+            }
+            AllocatedLocation::Stack { .. } => todo!(),
         }
     }
 }

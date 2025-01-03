@@ -1,3 +1,4 @@
+#[allow(unused)]
 use rustix::mm::{mmap_anonymous, mprotect, MapFlags, MprotectFlags, ProtFlags};
 use thiserror::Error;
 

@@ -42,3 +42,6 @@ coverage:
 
 open-coverage:
     open target/coverage/html/index.html
+
+build-linux-x64:
+    cargo build --target x86_64-unknown-linux-gnu
