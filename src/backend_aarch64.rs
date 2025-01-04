@@ -1,7 +1,7 @@
 use std::fmt::{Display, Write};
 
 use crate::{
-    backend::{GeneratedMachineCode, MachineCodeGenerator},
+    backend::{BackendError, GeneratedMachineCode, MachineCodeGenerator},
     backend_register_allocator::{self, AllocatedLocation},
     ir::{CompiledFunction, Instruction, RegisterIndex},
 };
@@ -297,7 +297,10 @@ pub struct Aarch64Generator {
 }
 
 impl MachineCodeGenerator for Aarch64Generator {
-    fn generate_machine_code(&mut self, function: &CompiledFunction) -> GeneratedMachineCode {
+    fn generate_machine_code(
+        &mut self,
+        function: &CompiledFunction,
+    ) -> Result<GeneratedMachineCode, BackendError> {
         self.allocate_registers(function);
 
         let mut instructions = Vec::new();
@@ -312,7 +315,11 @@ impl MachineCodeGenerator for Aarch64Generator {
                                 value: *val,
                             })
                         }
-                        AllocatedLocation::Stack { offset: _ } => todo!(),
+                        AllocatedLocation::Stack { offset: _ } => {
+                            return Err(BackendError::NotImplemented(
+                                "move immediate to stack".to_string(),
+                            ))
+                        }
                     }
                 }
 
@@ -325,7 +332,11 @@ impl MachineCodeGenerator for Aarch64Generator {
                                 destination: Register::X0,
                             });
                         }
-                        AllocatedLocation::Stack { offset: _ } => todo!(),
+                        AllocatedLocation::Stack { offset: _ } => {
+                            return Err(BackendError::NotImplemented(
+                                "return value from stack".to_string(),
+                            ))
+                        }
                     }
                     instructions.push(Aarch64Instruction::Ret);
                 }
@@ -341,7 +352,7 @@ impl MachineCodeGenerator for Aarch64Generator {
                             reg1,
                             reg2,
                         },
-                    );
+                    )?;
                 }
 
                 Instruction::Sub { dest, op1, op2 } => {
@@ -355,7 +366,7 @@ impl MachineCodeGenerator for Aarch64Generator {
                             reg1,
                             reg2,
                         },
-                    );
+                    )?;
                 }
 
                 Instruction::Mul { dest, op1, op2 } => {
@@ -369,7 +380,7 @@ impl MachineCodeGenerator for Aarch64Generator {
                             reg1,
                             reg2,
                         },
-                    );
+                    )?;
                 }
 
                 Instruction::Div { dest, op1, op2 } => {
@@ -383,7 +394,7 @@ impl MachineCodeGenerator for Aarch64Generator {
                             reg1,
                             reg2,
                         },
-                    );
+                    )?;
                 }
             }
         }
@@ -396,7 +407,7 @@ impl MachineCodeGenerator for Aarch64Generator {
             machine_code.extend(instruction.make_machine_code());
         }
 
-        GeneratedMachineCode { asm, machine_code }
+        Ok(GeneratedMachineCode { asm, machine_code })
     }
 }
 
@@ -426,7 +437,7 @@ impl Aarch64Generator {
         op1: RegisterIndex,
         op2: RegisterIndex,
         callback: impl Fn(Register, Register, Register) -> Aarch64Instruction,
-    ) {
+    ) -> Result<(), BackendError> {
         let op1: usize = op1.into();
         let op2: usize = op2.into();
         let dest: usize = dest.into();
@@ -436,13 +447,19 @@ impl Aarch64Generator {
                 AllocatedLocation::Register { register: reg2 } => match self.locations[dest] {
                     AllocatedLocation::Register { register: dest } => {
                         instructions.push(callback(dest, reg1, reg2));
+                        Ok(())
                     }
-                    AllocatedLocation::Stack { offset: _ } => todo!(),
+                    AllocatedLocation::Stack { offset: _ } => Err(BackendError::NotImplemented(
+                        "binop when destination is in stack".to_string(),
+                    )),
                 },
-
-                AllocatedLocation::Stack { offset: _ } => todo!(),
+                AllocatedLocation::Stack { offset: _ } => Err(BackendError::NotImplemented(
+                    "binop when one operand is in stack".to_string(),
+                )),
             },
-            AllocatedLocation::Stack { offset: _ } => todo!(),
+            AllocatedLocation::Stack { offset: _ } => Err(BackendError::NotImplemented(
+                "binop when one operand is in stack".to_string(),
+            )),
         }
     }
 }
@@ -575,12 +592,11 @@ mod test {
         assert_eq!(compiled.len(), 1);
 
         let mut gen = Aarch64Generator::default();
-        let machine_code = gen.generate_machine_code(&compiled[0]);
-        println!("{}", machine_code.asm);
-        machine_code
-            .machine_code
-            .iter()
-            .for_each(|byte| print!("{:02X} ", byte));
+        let machine_code = gen.generate_machine_code(&compiled[0]).unwrap();
+        assert_eq!(
+            vec![0x48, 0x05, 0x80, 0xD2, 0xE0, 0x03, 0x08, 0xAA, 0xC0, 0x03, 0x5F, 0xD6],
+            machine_code.machine_code
+        );
     }
 
     proptest! {

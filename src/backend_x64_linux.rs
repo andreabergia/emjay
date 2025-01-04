@@ -1,7 +1,7 @@
 use std::fmt::{Display, Write};
 
 use crate::{
-    backend::{GeneratedMachineCode, MachineCodeGenerator},
+    backend::{BackendError, GeneratedMachineCode, MachineCodeGenerator},
     backend_register_allocator::{self, AllocatedLocation},
     ir::{CompiledFunction, RegisterIndex},
 };
@@ -87,8 +87,8 @@ impl Display for X64Instruction {
 }
 
 impl X64Instruction {
-    fn make_machine_code(&self) -> Vec<u8> {
-        match self {
+    fn make_machine_code(&self) -> Result<Vec<u8>, BackendError> {
+        Ok(match self {
             X64Instruction::Retn => vec![0xC3],
             X64Instruction::Push { register } => vec![0x50 + register.index()],
             X64Instruction::Pop { register } => vec![0x58 + register.index()],
@@ -102,25 +102,28 @@ impl X64Instruction {
             X64Instruction::MovRegToReg {
                 source,
                 destination,
-            } => vec![0x48, 0x89, self.lookup_reg_reg(*source, *destination)],
+            } => vec![0x48, 0x89, self.lookup_reg_reg(*source, *destination)?],
             X64Instruction::AddRegToRax { register } => {
-                vec![0x48, 0x01, self.lookup_reg_reg(*register, Register::Rax)]
+                vec![0x48, 0x01, self.lookup_reg_reg(*register, Register::Rax)?]
             }
-        }
+        })
     }
 
-    fn lookup_reg_reg(&self, source: Register, destination: Register) -> u8 {
+    // TODO: I am not clear how to encode this in a generalized way.
+    fn lookup_reg_reg(&self, source: Register, destination: Register) -> Result<u8, BackendError> {
         match (source, destination) {
-            (Register::Rax, Register::Rbx) => 0xC3,
-            (Register::Rax, Register::Rcx) => 0xC1,
-            (Register::Rax, Register::Rdx) => 0xC2,
-            (Register::Rbx, Register::Rax) => 0xD8,
-            (Register::Rcx, Register::Rax) => 0xC8,
-            (Register::Rdx, Register::Rax) => 0xD0,
+            (Register::Rax, Register::Rbx) => Ok(0xC3),
+            (Register::Rax, Register::Rcx) => Ok(0xC1),
+            (Register::Rax, Register::Rdx) => Ok(0xC2),
+            (Register::Rbx, Register::Rax) => Ok(0xD8),
+            (Register::Rcx, Register::Rax) => Ok(0xC8),
+            (Register::Rdx, Register::Rax) => Ok(0xD0),
 
-            (Register::Rsp, Register::Rbp) => 0xE5,
-            (Register::Rbp, Register::Rsp) => 0xEC,
-            _ => panic!("unimplemented {} -> {}", source, destination),
+            (Register::Rsp, Register::Rbp) => Ok(0xE5),
+            (Register::Rbp, Register::Rsp) => Ok(0xEC),
+            _ => Err(BackendError::NotImplemented(format!(
+                "encoding of move from reg {source} to reg {destination}",
+            ))),
         }
     }
 }
@@ -131,7 +134,10 @@ pub struct X64LinuxGenerator {
 }
 
 impl MachineCodeGenerator for X64LinuxGenerator {
-    fn generate_machine_code(&mut self, function: &CompiledFunction) -> GeneratedMachineCode {
+    fn generate_machine_code(
+        &mut self,
+        function: &CompiledFunction,
+    ) -> Result<GeneratedMachineCode, BackendError> {
         self.allocate_registers(function);
 
         let mut instructions = Vec::new();
@@ -149,7 +155,11 @@ impl MachineCodeGenerator for X64LinuxGenerator {
                 crate::ir::Instruction::Mvi { dest, val } => {
                     let dest: usize = (*dest).into();
                     match self.locations[dest] {
-                        AllocatedLocation::Stack { .. } => todo!(),
+                        AllocatedLocation::Stack { .. } => {
+                            return Err(BackendError::NotImplemented(
+                                "move immediate to stack".to_string(),
+                            ))
+                        }
                         AllocatedLocation::Register { register } => {
                             instructions.push(X64Instruction::MovImmToReg {
                                 register,
@@ -160,7 +170,7 @@ impl MachineCodeGenerator for X64LinuxGenerator {
                 }
 
                 crate::ir::Instruction::Ret { reg } => {
-                    self.move_to_accumulator(reg, &mut instructions);
+                    self.move_to_accumulator(reg, &mut instructions)?;
 
                     // Epilogue and then return
                     instructions.push(X64Instruction::Pop {
@@ -172,10 +182,15 @@ impl MachineCodeGenerator for X64LinuxGenerator {
                 crate::ir::Instruction::Add { dest, op1, op2 } => {
                     self.do_bin_op(&mut instructions, op1, op2, dest, |register| {
                         X64Instruction::AddRegToRax { register }
-                    })
+                    })?
                 }
 
-                _ => todo!(),
+                _ => {
+                    return Err(BackendError::NotImplemented(format!(
+                        "instruction {:?}",
+                        instruction
+                    )))
+                }
             }
         }
 
@@ -184,32 +199,39 @@ impl MachineCodeGenerator for X64LinuxGenerator {
 
         for instruction in instructions {
             let _ = writeln!(&mut asm, "{}", instruction);
-            machine_code.extend(instruction.make_machine_code());
+            machine_code.extend(instruction.make_machine_code()?);
         }
 
-        GeneratedMachineCode { asm, machine_code }
+        Ok(GeneratedMachineCode { asm, machine_code })
     }
 }
 
 impl X64LinuxGenerator {
     fn allocate_registers(&mut self, function: &CompiledFunction) {
-        let allocations = backend_register_allocator::allocate::<Register>(
+        let allocations = backend_register_allocator::allocate(
             function,
             vec![Register::Rcx, Register::Rdx, Register::Rbx, Register::Rsi],
         );
         self.locations.extend(allocations);
     }
 
-    fn move_to_accumulator(&mut self, reg: &RegisterIndex, instructions: &mut Vec<X64Instruction>) {
+    fn move_to_accumulator(
+        &mut self,
+        reg: &RegisterIndex,
+        instructions: &mut Vec<X64Instruction>,
+    ) -> Result<(), BackendError> {
         let reg: usize = (*reg).into();
         match self.locations[reg] {
             AllocatedLocation::Register { register } => {
                 instructions.push(X64Instruction::MovRegToReg {
                     source: register,
                     destination: Register::Rax,
-                })
+                });
+                Ok(())
             }
-            AllocatedLocation::Stack { .. } => todo!(),
+            AllocatedLocation::Stack { .. } => Err(BackendError::NotImplemented(
+                "move to accumulator from stack".to_string(),
+            )),
         }
     }
 
@@ -220,12 +242,16 @@ impl X64LinuxGenerator {
         op2: &RegisterIndex,
         dest: &RegisterIndex,
         lambda: impl Fn(Register) -> X64Instruction,
-    ) {
-        self.move_to_accumulator(op1, instructions);
+    ) -> Result<(), BackendError> {
+        self.move_to_accumulator(op1, instructions)?;
 
         let op2: usize = (*op2).into();
         match self.locations[op2] {
-            AllocatedLocation::Stack { .. } => todo!(),
+            AllocatedLocation::Stack { .. } => {
+                return Err(BackendError::NotImplemented(
+                    "binop when operand 2 is on the stack".to_string(),
+                ))
+            }
             AllocatedLocation::Register { register } => instructions.push(lambda(register)),
         }
 
@@ -235,9 +261,12 @@ impl X64LinuxGenerator {
                 instructions.push(X64Instruction::MovRegToReg {
                     source: Register::Rax,
                     destination: register,
-                })
+                });
+                Ok(())
             }
-            AllocatedLocation::Stack { .. } => todo!(),
+            AllocatedLocation::Stack { .. } => Err(BackendError::NotImplemented(
+                "binop when destination is on the stack".to_string(),
+            )),
         }
     }
 }
@@ -254,11 +283,14 @@ mod test {
         assert_eq!(compiled.len(), 1);
 
         let mut gen = X64LinuxGenerator::default();
-        let machine_code = gen.generate_machine_code(&compiled[0]);
-        println!("{}", machine_code.asm);
-        machine_code
-            .machine_code
-            .iter()
-            .for_each(|byte| print!("{:02X} ", byte));
+        let machine_code = gen.generate_machine_code(&compiled[0]).unwrap();
+        assert_eq!(
+            machine_code.machine_code,
+            vec![
+                0x55, 0x48, 0x89, 0xE5, 0x48, 0xB9, 0x2A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x48, 0xBA, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x48, 0x89, 0xC8, 0x48,
+                0x01, 0xD0, 0x48, 0x89, 0xC3, 0x48, 0x89, 0xD8, 0x5D, 0xC3
+            ]
+        )
     }
 }

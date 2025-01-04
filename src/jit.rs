@@ -8,7 +8,7 @@ use crate::backend_aarch64::Aarch64Generator;
 use crate::backend_x64_linux::X64LinuxGenerator;
 
 use crate::{
-    backend::MachineCodeGenerator,
+    backend::{BackendError, MachineCodeGenerator},
     frontend::{self, FrontendError},
     parser,
 };
@@ -75,7 +75,9 @@ pub enum JitError {
     #[error("{0}")]
     Frontend(#[from] FrontendError),
     #[error("{0}")]
-    Ji(#[from] MmapError),
+    Backend(#[from] BackendError),
+    #[error("{0}")]
+    Jit(#[from] MmapError),
 }
 
 pub fn jit_compile_fn(source: &str) -> Result<fn() -> i64, JitError> {
@@ -95,7 +97,7 @@ pub fn jit_compile_fn(source: &str) -> Result<fn() -> i64, JitError> {
     #[cfg(target_arch = "aarch64")]
     let mut gen = Aarch64Generator::default();
 
-    let machine_code = gen.generate_machine_code(&compiled[0]);
+    let machine_code = gen.generate_machine_code(&compiled[0])?;
     println!("asm:");
     println!("{}", machine_code.asm);
 
