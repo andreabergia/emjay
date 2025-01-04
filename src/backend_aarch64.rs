@@ -166,7 +166,7 @@ impl Display for Aarch64Instruction {
                 destination,
                 reg1,
                 reg2,
-            } => write!(f, "subs  {}, {}, {}", destination, reg1, reg2),
+            } => write!(f, "subs {}, {}, {}", destination, reg1, reg2),
 
             Aarch64Instruction::MulRegToReg {
                 destination,
@@ -469,6 +469,7 @@ mod test {
     use super::*;
     use crate::{frontend, parser::*};
     use proptest::prelude::*;
+    use trim_margin::MarginTrimmable;
 
     #[test]
     fn can_encode_move_immediate_16_bit() {
@@ -595,6 +596,44 @@ mod test {
         let machine_code = gen.generate_machine_code(&compiled[0]).unwrap();
         assert_eq!(
             vec![0x48, 0x05, 0x80, 0xD2, 0xE0, 0x03, 0x08, 0xAA, 0xC0, 0x03, 0x5F, 0xD6],
+            machine_code.machine_code
+        );
+    }
+
+    #[test]
+    fn can_compile_math() {
+        let program =
+            parse_program("fn the_answer() { let a = 3; return a + 1 - 2 * 3 / 4; }").unwrap();
+        let compiled = frontend::compile(program).unwrap();
+        assert_eq!(compiled.len(), 1);
+
+        let mut gen = Aarch64Generator::default();
+        let machine_code = gen.generate_machine_code(&compiled[0]).unwrap();
+        assert_eq!(
+            "
+            |movz x8, 3
+            |movz x9, 1
+            |add  x10, x8, x9
+            |movz x9, 2
+            |movz x8, 3
+            |mul  x11, x9, x8
+            |movz x9, 4
+            |sdiv x8, x11, x9
+            |subs x11, x10, x8
+            |mov  x0, x11
+            |ret
+            |"
+            .trim_margin()
+            .unwrap(),
+            machine_code.asm
+        );
+        assert_eq!(
+            vec![
+                0x68, 0x00, 0x80, 0xD2, 0x29, 0x00, 0x80, 0xD2, 0x0A, 0x01, 0x09, 0x8B, 0x49, 0x00,
+                0x80, 0xD2, 0x68, 0x00, 0x80, 0xD2, 0x2B, 0x7D, 0x08, 0x9B, 0x89, 0x00, 0x80, 0xD2,
+                0x68, 0x0D, 0xC9, 0x9A, 0x4B, 0x01, 0x08, 0xEB, 0xE0, 0x03, 0x0B, 0xAA, 0xC0, 0x03,
+                0x5F, 0xD6,
+            ],
             machine_code.machine_code
         );
     }
