@@ -50,12 +50,18 @@ mod tests {
     }
 
     #[test]
+    fn grammar_can_parse_function_call() {
+        assert_can_be_parsed_as("f()", Rule::functionCall);
+    }
+
+    #[test]
     fn grammar_can_parse_expression() {
         assert_can_be_parsed_as("x", Rule::expression);
         assert_can_be_parsed_as("42", Rule::expression);
         assert_can_be_parsed_as("-3", Rule::expression);
-        assert_can_be_parsed_as("3 * 4 + 2", Rule::expression);
-        assert_can_be_parsed_as("-(1 + x) * 4 - 2", Rule::expression);
+        assert_can_be_parsed_as("3 * 4 + g", Rule::expression);
+        assert_can_be_parsed_as("-(1 + x) * 4 - f()", Rule::expression);
+        assert_can_be_parsed_as("f()", Rule::expression);
     }
 
     #[test]

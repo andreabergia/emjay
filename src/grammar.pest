@@ -13,16 +13,17 @@ assignmentStatement = { identifier ~ "=" ~ expression }
 returnStatement = { "return" ~ expression }
 
 expression = { prefix? ~ factor ~ (infix ~ prefix? ~ factor )* }
-    infix    =  _{ add | sub | mul | div | pow | rem }
-      add    =   { "+" } // Addition
-      sub    =   { "-" } // Subtraction
-      mul    =   { "*" } // Multiplication
-      div    =   { "/" } // Division
-      pow    =   { "^" } // Exponentiation
-      rem    =   { "%" } // Remainder
-    prefix   =  _{ neg }
-      neg    =   { "-" } // Negation
-    factor  =  _{ number | identifier | "(" ~ expression ~ ")" }
+      infix    =  _{ add | sub | mul | div | pow | rem }
+        add    =   { "+" } // Addition
+        sub    =   { "-" } // Subtraction
+        mul    =   { "*" } // Multiplication
+        div    =   { "/" } // Division
+        pow    =   { "^" } // Exponentiation
+        rem    =   { "%" } // Remainder
+      prefix   =  _{ neg }
+        neg    =   { "-" } // Negation
+      factor   =  _{ number | "(" ~ expression ~ ")" | functionCall | identifier }
+  functionCall =   { identifier ~ "(" ~ ")" }
 
 number = @{"-"? ~ (hexNumber | decimalNumber)}
 
