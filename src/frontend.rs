@@ -196,6 +196,14 @@ impl<'input> FunctionCompiler {
                 body.push(Instruction::Mvi { dest: reg, val: *n });
                 Ok(reg)
             }
+            Expression::FunctionCall(call) => {
+                let dest = self.allocate_reg();
+                body.push(Instruction::Call {
+                    dest,
+                    name: call.name.to_string(),
+                });
+                Ok(dest)
+            }
             Expression::Negate(_) => todo!(),
             Expression::Add(left, right) => {
                 let op1 = self.compile_expression(body, left, symbol_table.clone())?;
@@ -239,14 +247,14 @@ impl<'input> FunctionCompiler {
 mod test {
     use super::*;
     use crate::{
-        ir::builders::{add, div, mul, mvi, ret, sub},
+        ir::builders::{add, call, div, mul, mvi, ret, sub},
         parser::*,
     };
 
     #[test]
     fn can_compile_variable_declaration_and_math() {
         let program =
-            parse_program("fn the_answer() { let a = 3; return a + 1 - 2 * 3 / 4; }").unwrap();
+            parse_program("fn the_answer() { let a = 3; return a + 1 - 2 * 3 / f(); }").unwrap();
         let compiled = compile(program).unwrap();
         assert_eq!(compiled.len(), 1);
 
@@ -262,7 +270,7 @@ mod test {
                 mvi(3, 2.0),
                 mvi(4, 3.0),
                 mul(5, 3, 4),
-                mvi(6, 4.0),
+                call(6, "f"),
                 div(7, 5, 6),
                 sub(8, 2, 7),
                 ret(8),

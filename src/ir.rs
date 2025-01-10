@@ -56,9 +56,12 @@ pub enum Instruction {
         op1: RegisterIndex,
         op2: RegisterIndex,
     },
-
     Ret {
         reg: RegisterIndex,
+    },
+    Call {
+        dest: RegisterIndex,
+        name: String,
     },
 }
 
@@ -71,6 +74,7 @@ impl Instruction {
             Instruction::Mul { dest, op1, op2 } => vec![*dest, *op1, *op2].into_iter(),
             Instruction::Div { dest, op1, op2 } => vec![*dest, *op1, *op2].into_iter(),
             Instruction::Ret { reg } => vec![*reg].into_iter(),
+            Instruction::Call { dest, .. } => vec![*dest].into_iter(),
         }
     }
 }
@@ -91,6 +95,7 @@ impl fmt::Display for Instruction {
             Instruction::Mul { dest, op1, op2 } => write!(f, "mul @r{}, r{}, r{}", dest, op1, op2),
             Instruction::Div { dest, op1, op2 } => write!(f, "div @r{}, r{}, r{}", dest, op1, op2),
             Instruction::Ret { reg } => write!(f, "ret r{}", reg),
+            Instruction::Call { dest, name } => write!(f, "call @r{} {}", dest, name),
         }
     }
 }
@@ -151,6 +156,13 @@ pub mod builders {
     pub fn ret(reg: u32) -> Instruction {
         Instruction::Ret {
             reg: RegisterIndex::from_u32(reg),
+        }
+    }
+
+    pub fn call(dest: u32, name: &str) -> Instruction {
+        Instruction::Call {
+            dest: RegisterIndex::from_u32(dest),
+            name: name.to_string(),
         }
     }
 }

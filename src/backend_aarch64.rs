@@ -396,6 +396,8 @@ impl MachineCodeGenerator for Aarch64Generator {
                         },
                     )?;
                 }
+
+                Instruction::Call { .. } => todo!("function call"),
             }
         }
 
