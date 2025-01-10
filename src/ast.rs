@@ -23,6 +23,11 @@ pub enum BlockElement<'input> {
 pub type Block<'input> = Vec<BlockElement<'input>>;
 
 #[derive(Debug, PartialEq)]
+pub struct FunctionCall<'input> {
+    pub name: &'input str,
+}
+
+#[derive(Debug, PartialEq)]
 pub enum Expression<'input> {
     Identifier(&'input str),
     Number(f64),
@@ -33,4 +38,5 @@ pub enum Expression<'input> {
     Div(Box<Self>, Box<Self>),
     Pow(Box<Self>, Box<Self>),
     Rem(Box<Self>, Box<Self>),
+    FunctionCall(FunctionCall<'input>),
 }

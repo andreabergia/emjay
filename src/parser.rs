@@ -3,7 +3,7 @@ use pest::iterators::Pair;
 use pest::Parser;
 use thiserror::Error;
 
-use crate::ast::{Block, BlockElement, Expression, Function, Program};
+use crate::ast::{Block, BlockElement, Expression, Function, FunctionCall, Program};
 use crate::grammar::{EmjayGrammar, Rule};
 
 fn parse_expression(rule: Pair<'_, Rule>) -> Expression {
@@ -13,6 +13,7 @@ fn parse_expression(rule: Pair<'_, Rule>) -> Expression {
             Rule::number => Expression::Number(primary.as_str().parse().unwrap()),
             Rule::identifier => Expression::Identifier(primary.as_str()),
             Rule::expression => parse_expression(primary),
+            Rule::functionCall => Expression::FunctionCall(parse_function_call(primary)),
             _ => unreachable!(""),
         })
         .map_prefix(|prefix, right| match prefix.as_rule() {
@@ -29,6 +30,12 @@ fn parse_expression(rule: Pair<'_, Rule>) -> Expression {
             _ => unreachable!(),
         })
         .parse(rule.into_inner())
+}
+
+fn parse_function_call(rule: Pair<'_, Rule>) -> FunctionCall {
+    let mut inner = rule.into_inner();
+    let name = inner.next().unwrap().as_str();
+    FunctionCall { name }
 }
 
 fn parse_statement_let(rule: Pair<'_, Rule>) -> BlockElement {
@@ -96,7 +103,7 @@ pub fn parse_program(program: &str) -> Result<Program, Box<ParseError>> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        ast::{BlockElement, Expression, Function},
+        ast::{BlockElement, Expression, Function, FunctionCall},
         parser::parse_program,
     };
 
@@ -104,7 +111,7 @@ mod tests {
     fn can_parse_program() {
         let program = parse_program(
             r"fn foo() {
-            let x = -y + 3 * (z - 1);
+            let x = -y + 3 * (z() - 1);
             {
                 let z = 42;
             }
@@ -123,7 +130,7 @@ mod tests {
                             Box::new(Expression::Mul(
                                 Box::new(Expression::Number(3f64)),
                                 Box::new(Expression::Sub(
-                                    Box::new(Expression::Identifier("z")),
+                                    Box::new(Expression::FunctionCall(FunctionCall { name: "z" })),
                                     Box::new(Expression::Number(1f64))
                                 ))
                             ))
