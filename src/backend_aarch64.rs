@@ -37,6 +37,7 @@ enum Register {
     X26,
     X27,
     X28,
+    X29,
 }
 
 impl Register {
@@ -71,6 +72,7 @@ impl Register {
             Register::X26 => 26,
             Register::X27 => 27,
             Register::X28 => 28,
+            Register::X29 => 29,
         }
     }
 }
@@ -107,11 +109,13 @@ impl Display for Register {
             Register::X26 => write!(f, "x26"),
             Register::X27 => write!(f, "x27"),
             Register::X28 => write!(f, "x28"),
+            Register::X29 => write!(f, "x29"),
         }
     }
 }
 
 enum Aarch64Instruction {
+    Nop,
     Ret,
     MovImmToReg {
         register: Register,
@@ -141,11 +145,20 @@ enum Aarch64Instruction {
         reg1: Register,
         reg2: Register,
     },
+    Blr {
+        register: Register,
+    },
+    Str {
+        register: Register,
+        base: Register,
+        offset: u32,
+    },
 }
 
 impl Display for Aarch64Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Aarch64Instruction::Nop => write!(f, "nop"),
             Aarch64Instruction::Ret => write!(f, "ret"),
             Aarch64Instruction::MovImmToReg { register, value } => {
                 write!(f, "movz {}, {}", register, value)
@@ -161,24 +174,27 @@ impl Display for Aarch64Instruction {
                 reg1,
                 reg2,
             } => write!(f, "add  {}, {}, {}", destination, reg1, reg2),
-
             Aarch64Instruction::SubRegToReg {
                 destination,
                 reg1,
                 reg2,
             } => write!(f, "subs {}, {}, {}", destination, reg1, reg2),
-
             Aarch64Instruction::MulRegToReg {
                 destination,
                 reg1,
                 reg2,
             } => write!(f, "mul  {}, {}, {}", destination, reg1, reg2),
-
             Aarch64Instruction::DivRegToReg {
                 destination,
                 reg1,
                 reg2,
             } => write!(f, "sdiv {}, {}, {}", destination, reg1, reg2),
+            Aarch64Instruction::Blr { register } => write!(f, "blr {}", register),
+            Aarch64Instruction::Str {
+                register,
+                base,
+                offset,
+            } => write!(f, "str  {}, [{}, #{}]", register, base, offset),
         }
     }
 }
@@ -193,10 +209,13 @@ impl Aarch64Instruction {
     const SUBS: u32 = 0xEB000000;
     const MUL: u32 = 0x9B007C00;
     const SDIV: u32 = 0x9AC00C00;
+    const BLR: u32 = 0xD63F0000;
+    const STR: u32 = 0xF9000000;
 
     fn make_machine_code(&self) -> Vec<u8> {
         match self {
-            Aarch64Instruction::Ret => vec![0xc0, 0x03, 0x5f, 0xd6],
+            Aarch64Instruction::Nop => vec![0xD5, 0x03, 0x20, 0x1F],
+            Aarch64Instruction::Ret => vec![0xC0, 0x03, 0x5F, 0xD6],
 
             Aarch64Instruction::MovImmToReg { register, value } => {
                 // Note: there are a lot more efficient encoding: for example, we always
@@ -267,6 +286,24 @@ impl Aarch64Instruction {
                 reg1,
                 reg2,
             } => Self::encode_three_reg_op(Self::SDIV, destination, reg1, reg2),
+
+            Aarch64Instruction::Blr { register } => {
+                let mut i = Self::BLR;
+                i |= register.index() << 5;
+                i.to_le_bytes().to_vec()
+            }
+
+            Aarch64Instruction::Str {
+                register,
+                base,
+                offset,
+            } => {
+                let mut i = Self::STR;
+                i |= base.index() << 5;
+                i |= register.index();
+                i |= (offset >> 3) << 10;
+                i.to_le_bytes().to_vec()
+            }
         }
     }
 
@@ -414,7 +451,6 @@ impl MachineCodeGenerator for Aarch64Generator {
 }
 
 impl Aarch64Generator {
-    // Extremely stupid algorithm - we never reuse registers!
     fn allocate_registers(&mut self, function: &CompiledFunction) {
         let allocations = backend_register_allocator::allocate::<Register>(
             function,
@@ -473,119 +509,147 @@ mod test {
     use proptest::prelude::*;
     use trim_margin::MarginTrimmable;
 
+    fn assert_encodes_as(instruction: Aarch64Instruction, expected_machine_code: Vec<u8>) {
+        let machine_code = instruction.make_machine_code();
+        assert_eq!(expected_machine_code, machine_code);
+    }
+
     #[test]
     fn can_encode_move_immediate_16_bit() {
-        let instruction = Aarch64Instruction::MovImmToReg {
-            register: Register::X1,
-            value: 123.,
-        };
-
-        let machine_code = instruction.make_machine_code();
-        assert_eq!(machine_code, vec![0x61, 0x0F, 0x80, 0xD2]);
+        assert_encodes_as(
+            Aarch64Instruction::MovImmToReg {
+                register: Register::X1,
+                value: 123.,
+            },
+            vec![0x61, 0x0F, 0x80, 0xD2],
+        );
     }
 
     #[test]
     fn can_encode_move_immediate_32_bit() {
-        let instruction = Aarch64Instruction::MovImmToReg {
-            register: Register::X1,
-            value: 1234567.,
-        };
-
-        let machine_code = instruction.make_machine_code();
-        assert_eq!(
-            machine_code,
-            vec![0xE1, 0xD0, 0x9A, 0xD2, 0x41, 0x02, 0xA0, 0xF2]
+        assert_encodes_as(
+            Aarch64Instruction::MovImmToReg {
+                register: Register::X1,
+                value: 1234567.,
+            },
+            vec![0xE1, 0xD0, 0x9A, 0xD2, 0x41, 0x02, 0xA0, 0xF2],
         );
     }
 
     #[test]
     fn can_encode_move_immediate_48_bit() {
-        let instruction = Aarch64Instruction::MovImmToReg {
-            register: Register::X1,
-            value: 12345678901.,
-        };
-
-        let machine_code = instruction.make_machine_code();
-        assert_eq!(
-            machine_code,
-            vec![0xA1, 0x86, 0x83, 0xD2, 0x81, 0xFB, 0xBB, 0xF2, 0x41, 0x00, 0xC0, 0xF2]
+        assert_encodes_as(
+            Aarch64Instruction::MovImmToReg {
+                register: Register::X1,
+                value: 12345678901.,
+            },
+            vec![
+                0xA1, 0x86, 0x83, 0xD2, 0x81, 0xFB, 0xBB, 0xF2, 0x41, 0x00, 0xC0, 0xF2,
+            ],
         );
     }
 
     #[test]
     fn can_encode_move_immediate_64_bit() {
-        let instruction = Aarch64Instruction::MovImmToReg {
-            register: Register::X1,
-            value: 1234567890123456.,
-        };
-
-        let machine_code = instruction.make_machine_code();
-        assert_eq!(
-            machine_code,
+        assert_encodes_as(
+            Aarch64Instruction::MovImmToReg {
+                register: Register::X1,
+                value: 1234567890123456.,
+            },
             vec![
                 0x01, 0x58, 0x97, 0xd2, 0x41, 0x91, 0xA7, 0xF2, 0xA1, 0x5A, 0xCC, 0xF2, 0x81, 0x00,
                 0xE0, 0xF2,
-            ]
+            ],
         );
     }
 
     #[test]
     fn can_encode_move_reg_to_reg() {
-        let instruction = Aarch64Instruction::MovRegToReg {
-            source: Register::X8,
-            destination: Register::X0,
-        };
-
-        let machine_code = instruction.make_machine_code();
-        assert_eq!(machine_code, vec![0xE0, 0x03, 0x08, 0xAA]);
+        assert_encodes_as(
+            Aarch64Instruction::MovRegToReg {
+                source: Register::X8,
+                destination: Register::X0,
+            },
+            vec![0xE0, 0x03, 0x08, 0xAA],
+        );
     }
 
     #[test]
     fn can_encode_add_reg_to_reg() {
-        let instruction = Aarch64Instruction::AddRegToReg {
-            destination: Register::X0,
-            reg1: Register::X9,
-            reg2: Register::X10,
-        };
-
-        let machine_code = instruction.make_machine_code();
-        assert_eq!(machine_code, vec![0x20, 0x01, 0x0A, 0x8B]);
+        assert_encodes_as(
+            Aarch64Instruction::AddRegToReg {
+                destination: Register::X0,
+                reg1: Register::X9,
+                reg2: Register::X10,
+            },
+            vec![0x20, 0x01, 0x0A, 0x8B],
+        );
     }
 
     #[test]
     fn can_encode_sub_reg_to_reg() {
-        let instruction = Aarch64Instruction::SubRegToReg {
-            destination: Register::X0,
-            reg1: Register::X9,
-            reg2: Register::X10,
-        };
-
-        let machine_code = instruction.make_machine_code();
-        assert_eq!(machine_code, vec![0x20, 0x01, 0x0A, 0xEB]);
+        assert_encodes_as(
+            Aarch64Instruction::SubRegToReg {
+                destination: Register::X0,
+                reg1: Register::X9,
+                reg2: Register::X10,
+            },
+            vec![0x20, 0x01, 0x0A, 0xEB],
+        );
     }
 
     #[test]
     fn can_encode_mul_reg_to_reg() {
-        let instruction = Aarch64Instruction::MulRegToReg {
-            destination: Register::X0,
-            reg1: Register::X9,
-            reg2: Register::X10,
-        };
-
-        let machine_code = instruction.make_machine_code();
-        assert_eq!(machine_code, vec![0x20, 0x7D, 0x0A, 0x9B]);
+        assert_encodes_as(
+            Aarch64Instruction::MulRegToReg {
+                destination: Register::X0,
+                reg1: Register::X9,
+                reg2: Register::X10,
+            },
+            vec![0x20, 0x7D, 0x0A, 0x9B],
+        );
     }
 
     #[test]
     fn can_encode_div_reg_to_reg() {
-        let instruction = Aarch64Instruction::DivRegToReg {
-            destination: Register::X0,
-            reg1: Register::X9,
-            reg2: Register::X10,
-        };
+        assert_encodes_as(
+            Aarch64Instruction::DivRegToReg {
+                destination: Register::X0,
+                reg1: Register::X9,
+                reg2: Register::X10,
+            },
+            vec![0x20, 0x0D, 0xCA, 0x9A],
+        );
+    }
 
-        let machine_code = instruction.make_machine_code();
-        assert_eq!(machine_code, vec![0x20, 0x0D, 0xCA, 0x9A]);
+    #[test]
+    fn can_encode_blr() {
+        assert_encodes_as(
+            Aarch64Instruction::Blr {
+                register: Register::X1,
+            },
+            vec![0x20, 0x00, 0x3F, 0xD6],
+        );
+    }
+
+    #[test]
+    fn can_encode_str() {
+        assert_encodes_as(
+            Aarch64Instruction::Str {
+                register: Register::X1,
+                base: Register::X29,
+                offset: 0,
+            },
+            vec![0xA1, 0x03, 0x00, 0xF9],
+        );
+        assert_encodes_as(
+            Aarch64Instruction::Str {
+                register: Register::X4,
+                base: Register::X5,
+                offset: 32,
+            },
+            vec![0xA4, 0x10, 0x00, 0xF9],
+        );
     }
 
     #[test]
