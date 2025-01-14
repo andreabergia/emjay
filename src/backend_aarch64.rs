@@ -149,7 +149,12 @@ enum Aarch64Instruction {
         register: Register,
     },
     Str {
-        register: Register,
+        source: Register,
+        base: Register,
+        offset: u32,
+    },
+    Ldr {
+        destination: Register,
         base: Register,
         offset: u32,
     },
@@ -191,10 +196,15 @@ impl Display for Aarch64Instruction {
             } => write!(f, "sdiv {}, {}, {}", destination, reg1, reg2),
             Aarch64Instruction::Blr { register } => write!(f, "blr {}", register),
             Aarch64Instruction::Str {
-                register,
+                source,
                 base,
                 offset,
-            } => write!(f, "str  {}, [{}, #{}]", register, base, offset),
+            } => write!(f, "str  {}, [{}, #{}]", source, base, offset),
+            Aarch64Instruction::Ldr {
+                destination,
+                base,
+                offset,
+            } => write!(f, "ldr  {}, [{}, #{}]", destination, base, offset),
         }
     }
 }
@@ -211,6 +221,7 @@ impl Aarch64Instruction {
     const SDIV: u32 = 0x9AC00C00;
     const BLR: u32 = 0xD63F0000;
     const STR: u32 = 0xF9000000;
+    const LDR: u32 = 0xF9400000;
 
     fn make_machine_code(&self) -> Vec<u8> {
         match self {
@@ -294,13 +305,25 @@ impl Aarch64Instruction {
             }
 
             Aarch64Instruction::Str {
-                register,
+                source,
                 base,
                 offset,
             } => {
                 let mut i = Self::STR;
                 i |= base.index() << 5;
-                i |= register.index();
+                i |= source.index();
+                i |= (offset >> 3) << 10;
+                i.to_le_bytes().to_vec()
+            }
+
+            Aarch64Instruction::Ldr {
+                destination,
+                base,
+                offset,
+            } => {
+                let mut i = Self::LDR;
+                i |= base.index() << 5;
+                i |= destination.index();
                 i |= (offset >> 3) << 10;
                 i.to_le_bytes().to_vec()
             }
@@ -640,7 +663,15 @@ mod test {
     fn can_encode_str() {
         assert_encodes_as(
             Aarch64Instruction::Str {
-                register: Register::X1,
+                source: Register::X0,
+                base: Register::X0,
+                offset: 0,
+            },
+            vec![0x00, 0x00, 0x00, 0xF9],
+        );
+        assert_encodes_as(
+            Aarch64Instruction::Str {
+                source: Register::X1,
                 base: Register::X29,
                 offset: 0,
             },
@@ -648,11 +679,39 @@ mod test {
         );
         assert_encodes_as(
             Aarch64Instruction::Str {
-                register: Register::X4,
+                source: Register::X4,
                 base: Register::X5,
                 offset: 32,
             },
             vec![0xA4, 0x10, 0x00, 0xF9],
+        );
+    }
+
+    #[test]
+    fn can_encode_ldr() {
+        assert_encodes_as(
+            Aarch64Instruction::Ldr {
+                destination: Register::X0,
+                base: Register::X0,
+                offset: 0,
+            },
+            vec![0x00, 0x00, 0x40, 0xF9],
+        );
+        assert_encodes_as(
+            Aarch64Instruction::Ldr {
+                destination: Register::X1,
+                base: Register::X29,
+                offset: 0,
+            },
+            vec![0xA1, 0x03, 0x40, 0xF9],
+        );
+        assert_encodes_as(
+            Aarch64Instruction::Ldr {
+                destination: Register::X4,
+                base: Register::X5,
+                offset: 32,
+            },
+            vec![0xA4, 0x10, 0x40, 0xF9],
         );
     }
 
