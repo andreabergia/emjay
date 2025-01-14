@@ -161,10 +161,14 @@ pub struct X64LinuxGenerator {
 }
 
 impl MachineCodeGenerator for X64LinuxGenerator {
-    fn generate_machine_code(
+    fn generate_machine_code<FC>(
         &mut self,
         function: &CompiledFunction,
-    ) -> Result<GeneratedMachineCode, BackendError> {
+        _function_catalog: &FC,
+    ) -> Result<GeneratedMachineCode, BackendError>
+    where
+        FC: crate::backend::FunctionCatalog,
+    {
         self.allocate_registers(function);
 
         let mut instructions = Vec::new();
@@ -362,7 +366,7 @@ mod test {
     use trim_margin::MarginTrimmable;
 
     use super::*;
-    use crate::{frontend, parser::*};
+    use crate::{backend::CompiledFunctionCatalog, frontend, parser::*};
 
     #[test]
     fn can_compile_trivial_function() {
@@ -371,7 +375,9 @@ mod test {
         assert_eq!(compiled.len(), 1);
 
         let mut gen = X64LinuxGenerator::default();
-        let machine_code = gen.generate_machine_code(&compiled[0]).unwrap();
+        let machine_code = gen
+            .generate_machine_code(&compiled[0], &CompiledFunctionCatalog::new(&compiled))
+            .unwrap();
         assert_eq!(
             machine_code.machine_code,
             vec![
@@ -389,7 +395,9 @@ mod test {
         assert_eq!(compiled.len(), 1);
 
         let mut gen = X64LinuxGenerator::default();
-        let machine_code = gen.generate_machine_code(&compiled[0]).unwrap();
+        let machine_code = gen
+            .generate_machine_code(&compiled[0], &CompiledFunctionCatalog::new(&compiled))
+            .unwrap();
         assert_eq!(
             "
             |push rbp

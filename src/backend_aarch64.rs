@@ -1,7 +1,7 @@
 use std::fmt::{Display, Write};
 
 use crate::{
-    backend::{BackendError, GeneratedMachineCode, MachineCodeGenerator},
+    backend::{BackendError, FunctionCatalog, GeneratedMachineCode, MachineCodeGenerator},
     backend_register_allocator::{self, AllocatedLocation},
     ir::{CompiledFunction, Instruction, RegisterIndex},
 };
@@ -334,10 +334,14 @@ pub struct Aarch64Generator {
 }
 
 impl MachineCodeGenerator for Aarch64Generator {
-    fn generate_machine_code(
+    fn generate_machine_code<FC>(
         &mut self,
         function: &CompiledFunction,
-    ) -> Result<GeneratedMachineCode, BackendError> {
+        _function_catalog: &FC,
+    ) -> Result<GeneratedMachineCode, BackendError>
+    where
+        FC: FunctionCatalog,
+    {
         self.allocate_registers(function);
 
         let mut instructions = Vec::new();
@@ -505,7 +509,7 @@ impl Aarch64Generator {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{frontend, parser::*};
+    use crate::{backend::CompiledFunctionCatalog, frontend, parser::*};
     use proptest::prelude::*;
     use trim_margin::MarginTrimmable;
 
@@ -654,12 +658,14 @@ mod test {
 
     #[test]
     fn can_compile_trivial_function() {
-        let program = parse_program("fn the_answer() { let a = 42; return a; }").unwrap();
+        let program = parse_program("fn main() { let a = 42; return a; }").unwrap();
         let compiled = frontend::compile(program).unwrap();
         assert_eq!(compiled.len(), 1);
 
         let mut gen = Aarch64Generator::default();
-        let machine_code = gen.generate_machine_code(&compiled[0]).unwrap();
+        let machine_code = gen
+            .generate_machine_code(&compiled[0], &CompiledFunctionCatalog::new(&compiled))
+            .unwrap();
         assert_eq!(
             vec![0x48, 0x05, 0x80, 0xD2, 0xE0, 0x03, 0x08, 0xAA, 0xC0, 0x03, 0x5F, 0xD6],
             machine_code.machine_code
@@ -674,7 +680,9 @@ mod test {
         assert_eq!(compiled.len(), 1);
 
         let mut gen = Aarch64Generator::default();
-        let machine_code = gen.generate_machine_code(&compiled[0]).unwrap();
+        let machine_code = gen
+            .generate_machine_code(&compiled[0], &CompiledFunctionCatalog::new(&compiled))
+            .unwrap();
         assert_eq!(
             "
             |movz x8, 3
