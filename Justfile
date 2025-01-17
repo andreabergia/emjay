@@ -20,6 +20,9 @@ clean:
 fmt:
     cargo fmt
 
+run:
+    cargo run
+
 coverage:
     rm \
         -rf \
