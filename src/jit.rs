@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 #[allow(unused)]
 use rustix::mm::{mmap_anonymous, mprotect, MapFlags, MprotectFlags, ProtFlags};
 use thiserror::Error;
@@ -10,9 +8,7 @@ use crate::backend_aarch64::Aarch64Generator;
 use crate::backend_x64_linux::X64LinuxGenerator;
 
 use crate::{
-    backend::{
-        BackendError, CompiledFunctionCatalog, FunctionCatalog, FunctionId, MachineCodeGenerator,
-    },
+    backend::{BackendError, CompiledFunctionCatalog, FunctionId, MachineCodeGenerator},
     frontend::{self, FrontendError},
     parser,
 };
@@ -88,7 +84,7 @@ pub enum JitError {
 
 #[derive(Debug)]
 pub struct JitProgram {
-    pub compiled_functions_by_id: HashMap<FunctionId, fn() -> i64>,
+    pub function_catalog: Box<CompiledFunctionCatalog>,
     pub main_function: fn() -> i64,
 }
 
@@ -105,9 +101,11 @@ pub fn jit_compile_program(source: &str, main_function_name: &str) -> Result<Jit
     #[cfg(target_arch = "aarch64")]
     let mut gen = Aarch64Generator::default();
 
-    let function_catalog = CompiledFunctionCatalog::new(&compiled_functions);
+    let mut function_catalog = Box::new(CompiledFunctionCatalog::new(&compiled_functions));
+    let function_catalog_ptr: *const CompiledFunctionCatalog = &*function_catalog;
+    println!("function catalog: {:0X}", function_catalog_ptr as usize);
+
     let mut main_function = None;
-    let mut compiled_functions_by_id = HashMap::<FunctionId, fn() -> i64>::new();
     for function in compiled_functions.iter() {
         println!("compiling function: {}", function.name);
         println!("ir:");
@@ -129,7 +127,7 @@ pub fn jit_compile_program(source: &str, main_function_name: &str) -> Result<Jit
         println!();
 
         let fun_ptr = unsafe { to_function_pointer(&machine_code.machine_code)? };
-        compiled_functions_by_id.insert(
+        function_catalog.store_function_pointer(
             function_catalog.get_function_id(function.name).unwrap(),
             fun_ptr,
         );
@@ -141,7 +139,7 @@ pub fn jit_compile_program(source: &str, main_function_name: &str) -> Result<Jit
 
     if let Some(main_function) = main_function {
         Ok(JitProgram {
-            compiled_functions_by_id,
+            function_catalog,
             main_function,
         })
     } else {
@@ -149,6 +147,25 @@ pub fn jit_compile_program(source: &str, main_function_name: &str) -> Result<Jit
             main_function_name.to_string(),
         ))
     }
+}
+
+pub fn jit_call_trampoline(
+    function_catalog_ptr: *const CompiledFunctionCatalog,
+    function_index: usize,
+) -> i64 {
+    println!(
+        "in trampoline with args {:?} {}",
+        function_catalog_ptr, function_index
+    );
+    let function_catalog = unsafe { &*function_catalog_ptr };
+    let fun = function_catalog
+        .get_function_pointer(FunctionId(function_index))
+        .unwrap();
+    println!("function pointer found: {:?}", fun);
+
+    let result = fun();
+    println!("function result: {}", result);
+    result
 }
 
 #[cfg(test)]

@@ -1,9 +1,10 @@
 use std::fmt::{Display, Write};
 
 use crate::{
-    backend::{BackendError, FunctionCatalog, GeneratedMachineCode, MachineCodeGenerator},
+    backend::{BackendError, CompiledFunctionCatalog, GeneratedMachineCode, MachineCodeGenerator},
     backend_register_allocator::{self, AllocatedLocation},
     ir::{CompiledFunction, Instruction, RegisterIndex},
+    jit::jit_call_trampoline,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -38,6 +39,8 @@ enum Register {
     X27,
     X28,
     X29,
+    X30,
+    Sp,
 }
 
 impl Register {
@@ -73,6 +76,8 @@ impl Register {
             Register::X27 => 27,
             Register::X28 => 28,
             Register::X29 => 29,
+            Register::X30 => 30,
+            Register::Sp => 31,
         }
     }
 }
@@ -81,13 +86,13 @@ impl Display for Register {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Register::X0 => write!(f, "x0"),
-            Register::X1 => write!(f, "x2"),
-            Register::X2 => write!(f, "x3"),
-            Register::X3 => write!(f, "x4"),
-            Register::X4 => write!(f, "x5"),
-            Register::X5 => write!(f, "x6"),
-            Register::X6 => write!(f, "x7"),
-            Register::X7 => write!(f, "x1"),
+            Register::X1 => write!(f, "x1"),
+            Register::X2 => write!(f, "x2"),
+            Register::X3 => write!(f, "x3"),
+            Register::X4 => write!(f, "x4"),
+            Register::X5 => write!(f, "x5"),
+            Register::X6 => write!(f, "x6"),
+            Register::X7 => write!(f, "x7"),
             Register::X8 => write!(f, "x8"),
             Register::X9 => write!(f, "x9"),
             Register::X10 => write!(f, "x10"),
@@ -110,6 +115,8 @@ impl Display for Register {
             Register::X27 => write!(f, "x27"),
             Register::X28 => write!(f, "x28"),
             Register::X29 => write!(f, "x29"),
+            Register::X30 => write!(f, "x30"),
+            Register::Sp => write!(f, "sp"),
         }
     }
 }
@@ -123,6 +130,9 @@ enum Aarch64Instruction {
     },
     MovRegToReg {
         source: Register,
+        destination: Register,
+    },
+    MovSpToReg {
         destination: Register,
     },
     AddRegToReg {
@@ -158,6 +168,19 @@ enum Aarch64Instruction {
         base: Register,
         offset: u32,
     },
+    Stp {
+        reg1: Register,
+        reg2: Register,
+        base: Register,
+        offset: i32,
+        pre_indexing: bool,
+    },
+    Ldp {
+        reg1: Register,
+        reg2: Register,
+        base: Register,
+        offset: i32,
+    },
 }
 
 impl Display for Aarch64Instruction {
@@ -173,6 +196,9 @@ impl Display for Aarch64Instruction {
                 destination,
             } => {
                 write!(f, "mov  {}, {}", destination, source)
+            }
+            Aarch64Instruction::MovSpToReg { destination } => {
+                write!(f, "mov  {}, sp", destination)
             }
             Aarch64Instruction::AddRegToReg {
                 destination,
@@ -205,6 +231,26 @@ impl Display for Aarch64Instruction {
                 base,
                 offset,
             } => write!(f, "ldr  {}, [{}, #{}]", destination, base, offset),
+            Aarch64Instruction::Stp {
+                reg1,
+                reg2,
+                base,
+                offset,
+                pre_indexing,
+            } => {
+                let pre_indexing = if *pre_indexing { "!" } else { "" };
+                write!(
+                    f,
+                    "stp  {}, {}, [{}, #{}]{}",
+                    reg1, reg2, base, offset, pre_indexing
+                )
+            }
+            Aarch64Instruction::Ldp {
+                reg1,
+                reg2,
+                base,
+                offset,
+            } => write!(f, "ldp  {}, {}, [{}], #{}", reg1, reg2, base, offset),
         }
     }
 }
@@ -215,6 +261,7 @@ impl Aarch64Instruction {
     const MOVK_SHIFT_32: u32 = 0xF2C00000;
     const MOVK_SHIFT_48: u32 = 0xF2E00000;
     const MOV: u32 = 0xAA0003E0;
+    const MOV_SP_TO_REG: u32 = 0x910003e0;
     const ADD: u32 = 0x8B000000;
     const SUBS: u32 = 0xEB000000;
     const MUL: u32 = 0x9B007C00;
@@ -222,6 +269,9 @@ impl Aarch64Instruction {
     const BLR: u32 = 0xD63F0000;
     const STR: u32 = 0xF9000000;
     const LDR: u32 = 0xF9400000;
+    const STP: u32 = 0xA9000000;
+    const STP_PRE_INDEX: u32 = 0xA9800000;
+    const LDP: u32 = 0xA8C00000;
 
     fn make_machine_code(&self) -> Vec<u8> {
         match self {
@@ -270,6 +320,12 @@ impl Aarch64Instruction {
             } => {
                 let mut i: u32 = Self::MOV;
                 i |= source.index() << 16;
+                i |= destination.index();
+                i.to_le_bytes().to_vec()
+            }
+
+            Aarch64Instruction::MovSpToReg { destination } => {
+                let mut i: u32 = Self::MOV_SP_TO_REG;
                 i |= destination.index();
                 i.to_le_bytes().to_vec()
             }
@@ -327,6 +383,53 @@ impl Aarch64Instruction {
                 i |= (offset >> 3) << 10;
                 i.to_le_bytes().to_vec()
             }
+
+            Aarch64Instruction::Stp {
+                reg1,
+                reg2,
+                base,
+                offset,
+                pre_indexing,
+            } => {
+                let mut i = if *pre_indexing {
+                    Self::STP_PRE_INDEX
+                } else {
+                    Self::STP
+                };
+                i |= reg1.index();
+                i |= reg2.index() << 10;
+                i |= base.index() << 5;
+                let offset: u32 = unsafe {
+                    std::mem::transmute(if *offset > 0 {
+                        offset >> 3
+                    } else {
+                        (offset >> 3) & 0x7F
+                    })
+                };
+                i |= offset << 15;
+                i.to_le_bytes().to_vec()
+            }
+
+            Aarch64Instruction::Ldp {
+                reg1,
+                reg2,
+                base,
+                offset,
+            } => {
+                let mut i = Self::LDP;
+                i |= reg1.index();
+                i |= reg2.index() << 10;
+                i |= base.index() << 5;
+                let offset: u32 = unsafe {
+                    std::mem::transmute(if *offset > 0 {
+                        offset >> 3
+                    } else {
+                        (offset >> 3) & 0x7F
+                    })
+                };
+                i |= offset << 15;
+                i.to_le_bytes().to_vec()
+            }
         }
     }
 
@@ -354,20 +457,29 @@ impl Aarch64Instruction {
 #[derive(Default)]
 pub struct Aarch64Generator {
     locations: Vec<AllocatedLocation<Register>>,
+    stack_offset: u32,
 }
 
 impl MachineCodeGenerator for Aarch64Generator {
-    fn generate_machine_code<FC>(
+    fn generate_machine_code(
         &mut self,
         function: &CompiledFunction,
-        _function_catalog: &FC,
-    ) -> Result<GeneratedMachineCode, BackendError>
-    where
-        FC: FunctionCatalog,
-    {
+        function_catalog: &Box<CompiledFunctionCatalog>,
+    ) -> Result<GeneratedMachineCode, BackendError> {
         self.allocate_registers(function);
 
         let mut instructions = Vec::new();
+        instructions.push(Aarch64Instruction::Stp {
+            reg1: Register::X29,
+            reg2: Register::X30,
+            base: Register::Sp,
+            offset: -32,
+            pre_indexing: true,
+        });
+        instructions.push(Aarch64Instruction::MovSpToReg {
+            destination: Register::X29,
+        });
+
         for instruction in function.body.iter() {
             match instruction {
                 Instruction::Mvi { dest, val } => {
@@ -402,6 +514,12 @@ impl MachineCodeGenerator for Aarch64Generator {
                             ))
                         }
                     }
+                    instructions.push(Aarch64Instruction::Ldp {
+                        reg1: Register::X29,
+                        reg2: Register::X30,
+                        base: Register::Sp,
+                        offset: 32,
+                    });
                     instructions.push(Aarch64Instruction::Ret);
                 }
 
@@ -461,7 +579,55 @@ impl MachineCodeGenerator for Aarch64Generator {
                     )?;
                 }
 
-                Instruction::Call { .. } => todo!("function call"),
+                Instruction::Call { dest, name } => {
+                    let dest: usize = (*dest).into();
+
+                    let called_function_index = function_catalog
+                        .get_function_id(name)
+                        .ok_or_else(|| BackendError::FunctionNotFound(name.to_string()))?;
+
+                    let fn_catalog_addr: usize =
+                        unsafe { std::mem::transmute(&**function_catalog) };
+                    let jit_call_trampoline_address: usize =
+                        (jit_call_trampoline as fn(_, _) -> _) as usize;
+
+                    // Leave space to move the address as an immediate to register X19
+                    //self.push(&mut instructions, Register::X19);
+                    //self.push(&mut instructions, Register::X1);
+
+                    instructions.push(Aarch64Instruction::MovImmToReg {
+                        register: Register::X0,
+                        value: fn_catalog_addr as f64,
+                    });
+                    instructions.push(Aarch64Instruction::MovImmToReg {
+                        register: Register::X1,
+                        value: called_function_index.0 as f64,
+                    });
+                    instructions.push(Aarch64Instruction::MovImmToReg {
+                        register: Register::X19,
+                        value: jit_call_trampoline_address as f64,
+                    });
+                    instructions.push(Aarch64Instruction::Blr {
+                        register: Register::X19,
+                    });
+
+                    match self.locations[dest] {
+                        AllocatedLocation::Register {
+                            register: destination,
+                        } => instructions.push(Aarch64Instruction::MovRegToReg {
+                            source: Register::X0,
+                            destination,
+                        }),
+                        AllocatedLocation::Stack { offset: _ } => {
+                            return Err(BackendError::NotImplemented(
+                                "move register to stack".to_string(),
+                            ))
+                        }
+                    }
+                    // TODO: enable
+                    //self.pop(&mut instructions, Register::X1);
+                    //self.pop(&mut instructions, Register::X19);
+                }
             }
         }
 
@@ -526,6 +692,24 @@ impl Aarch64Generator {
                 "binop when one operand is in stack".to_string(),
             )),
         }
+    }
+
+    fn push(&mut self, instructions: &mut Vec<Aarch64Instruction>, register: Register) {
+        self.stack_offset += 8;
+        instructions.push(Aarch64Instruction::Str {
+            source: register,
+            base: Register::X29,
+            offset: self.stack_offset,
+        });
+    }
+
+    fn pop(&mut self, instructions: &mut Vec<Aarch64Instruction>, register: Register) {
+        self.stack_offset -= 8;
+        instructions.push(Aarch64Instruction::Ldr {
+            destination: register,
+            base: Register::X29,
+            offset: self.stack_offset,
+        });
     }
 }
 
@@ -595,9 +779,19 @@ mod test {
         assert_encodes_as(
             Aarch64Instruction::MovRegToReg {
                 source: Register::X8,
-                destination: Register::X0,
+                destination: Register::X9,
             },
-            vec![0xE0, 0x03, 0x08, 0xAA],
+            vec![0xE9, 0x03, 0x08, 0xAA],
+        );
+    }
+
+    #[test]
+    fn can_encode_mov_sp_to_reg() {
+        assert_encodes_as(
+            Aarch64Instruction::MovSpToReg {
+                destination: Register::X29,
+            },
+            vec![0xFD, 0x03, 0x00, 0x91],
         );
     }
 
@@ -716,6 +910,83 @@ mod test {
     }
 
     #[test]
+    fn can_encode_stp() {
+        assert_encodes_as(
+            Aarch64Instruction::Stp {
+                reg1: Register::X0,
+                reg2: Register::X0,
+                base: Register::X0,
+                offset: 8,
+                pre_indexing: false,
+            },
+            vec![0x00, 0x80, 0x00, 0xA9],
+        );
+        assert_encodes_as(
+            Aarch64Instruction::Stp {
+                reg1: Register::X0,
+                reg2: Register::X0,
+                base: Register::X0,
+                offset: -8,
+                pre_indexing: false,
+            },
+            vec![0x00, 0x80, 0x3F, 0xA9],
+        );
+        assert_encodes_as(
+            Aarch64Instruction::Stp {
+                reg1: Register::X2,
+                reg2: Register::X0,
+                base: Register::X0,
+                offset: 0,
+                pre_indexing: false,
+            },
+            vec![0x02, 0x00, 0x00, 0xA9],
+        );
+        assert_encodes_as(
+            Aarch64Instruction::Stp {
+                reg1: Register::X0,
+                reg2: Register::X2,
+                base: Register::X0,
+                offset: 0,
+                pre_indexing: false,
+            },
+            vec![0x00, 0x08, 0x00, 0xA9],
+        );
+        assert_encodes_as(
+            Aarch64Instruction::Stp {
+                reg1: Register::X0,
+                reg2: Register::X0,
+                base: Register::X2,
+                offset: 0,
+                pre_indexing: false,
+            },
+            vec![0x40, 0x00, 0x00, 0xA9],
+        );
+        assert_encodes_as(
+            Aarch64Instruction::Stp {
+                reg1: Register::X29,
+                reg2: Register::X30,
+                base: Register::Sp,
+                offset: -16,
+                pre_indexing: false,
+            },
+            vec![0xFD, 0x7B, 0x3F, 0xA9],
+        );
+    }
+
+    #[test]
+    fn can_encode_ldp() {
+        assert_encodes_as(
+            Aarch64Instruction::Ldp {
+                reg1: Register::X29,
+                reg2: Register::X30,
+                base: Register::Sp,
+                offset: 32,
+            },
+            vec![0xFD, 0x7B, 0xC2, 0xA8],
+        );
+    }
+
+    #[test]
     fn can_compile_trivial_function() {
         let program = parse_program("fn main() { let a = 42; return a; }").unwrap();
         let compiled = frontend::compile(program).unwrap();
@@ -723,7 +994,10 @@ mod test {
 
         let mut gen = Aarch64Generator::default();
         let machine_code = gen
-            .generate_machine_code(&compiled[0], &CompiledFunctionCatalog::new(&compiled))
+            .generate_machine_code(
+                &compiled[0],
+                &Box::new(CompiledFunctionCatalog::new(&compiled)),
+            )
             .unwrap();
         assert_eq!(
             vec![0x48, 0x05, 0x80, 0xD2, 0xE0, 0x03, 0x08, 0xAA, 0xC0, 0x03, 0x5F, 0xD6],
@@ -740,7 +1014,10 @@ mod test {
 
         let mut gen = Aarch64Generator::default();
         let machine_code = gen
-            .generate_machine_code(&compiled[0], &CompiledFunctionCatalog::new(&compiled))
+            .generate_machine_code(
+                &compiled[0],
+                &Box::new(CompiledFunctionCatalog::new(&compiled)),
+            )
             .unwrap();
         assert_eq!(
             "

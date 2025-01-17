@@ -1,7 +1,7 @@
 use std::fmt::{Display, Write};
 
 use crate::{
-    backend::{BackendError, GeneratedMachineCode, MachineCodeGenerator},
+    backend::{BackendError, CompiledFunctionCatalog, GeneratedMachineCode, MachineCodeGenerator},
     backend_register_allocator::{self, AllocatedLocation},
     ir::{CompiledFunction, Instruction, RegisterIndex},
 };
@@ -161,14 +161,11 @@ pub struct X64LinuxGenerator {
 }
 
 impl MachineCodeGenerator for X64LinuxGenerator {
-    fn generate_machine_code<FC>(
+    fn generate_machine_code(
         &mut self,
         function: &CompiledFunction,
-        _function_catalog: &FC,
-    ) -> Result<GeneratedMachineCode, BackendError>
-    where
-        FC: crate::backend::FunctionCatalog,
-    {
+        _function_catalog: &Box<CompiledFunctionCatalog>,
+    ) -> Result<GeneratedMachineCode, BackendError> {
         self.allocate_registers(function);
 
         let mut instructions = Vec::new();
@@ -376,7 +373,10 @@ mod test {
 
         let mut gen = X64LinuxGenerator::default();
         let machine_code = gen
-            .generate_machine_code(&compiled[0], &CompiledFunctionCatalog::new(&compiled))
+            .generate_machine_code(
+                &compiled[0],
+                &Box::new(CompiledFunctionCatalog::new(&compiled)),
+            )
             .unwrap();
         assert_eq!(
             machine_code.machine_code,
@@ -396,7 +396,10 @@ mod test {
 
         let mut gen = X64LinuxGenerator::default();
         let machine_code = gen
-            .generate_machine_code(&compiled[0], &CompiledFunctionCatalog::new(&compiled))
+            .generate_machine_code(
+                &compiled[0],
+                &Box::new(CompiledFunctionCatalog::new(&compiled)),
+            )
             .unwrap();
         assert_eq!(
             "

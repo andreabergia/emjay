@@ -15,9 +15,16 @@ mod parser;
 mod program_counter;
 
 fn main() {
-    let source =
-        "fn main() { let a = 11; let b = 1; let c = a + 1; let d = b + 2; return c / (d - 1); }";
+    let source = r"
+        fn main() {
+            return f() + 1;
+        }
+
+        fn f() {
+            return 42;
+        }
+    ";
     let jit_program = jit_compile_program(source, "main").expect("program should compile");
     let res = (jit_program.main_function)() as f64;
-    println!("function result: {}", res);
+    println!("main function result: {}", res);
 }
