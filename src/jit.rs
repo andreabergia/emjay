@@ -158,9 +158,7 @@ pub fn jit_call_trampoline(
         function_catalog_ptr, function_index
     );
     let function_catalog = unsafe { &*function_catalog_ptr };
-    let fun = function_catalog
-        .get_function_pointer(FunctionId(function_index))
-        .unwrap();
+    let fun = function_catalog.get_function_pointer(FunctionId(function_index));
     println!("function pointer found: {:?}", fun);
 
     let result = fun();

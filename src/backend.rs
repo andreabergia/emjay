@@ -28,12 +28,15 @@ pub enum BackendError {
     FunctionNotFound(String),
 }
 
+/// Stores two maps:
+/// - function name -> a progressive ID
+/// - progressive ID -> address (after it has been mmap-ed)
 #[derive(Debug)]
 pub struct CompiledFunctionCatalog {
-    functions: HashMap<String, FunctionId>,
+    functions_by_name: HashMap<String, FunctionId>,
 
-    // TODO: could be a vec, no need for a hashmap
-    addresses: HashMap<FunctionId, fn() -> i64>,
+    // Indexed by FunctionId, which are dense
+    addresses: Vec<fn() -> i64>,
 }
 
 impl CompiledFunctionCatalog {
@@ -44,20 +47,24 @@ impl CompiledFunctionCatalog {
             .map(|(index, function)| (function.name.to_string(), FunctionId(index)))
             .collect();
         Self {
-            functions,
-            addresses: HashMap::new(),
+            functions_by_name: functions,
+            addresses: Vec::with_capacity(program.len()),
         }
     }
 
     pub fn get_function_id(&self, name: &str) -> Option<FunctionId> {
-        self.functions.get(name).copied()
+        self.functions_by_name.get(name).copied()
     }
 
+    /// Stores a function pointer. Requirement: it must be called in order of `id`
+    /// and;for each function in the program
     pub fn store_function_pointer(&mut self, id: FunctionId, fun_ptr: fn() -> i64) {
-        self.addresses.insert(id, fun_ptr);
+        assert!(id.0 == self.addresses.len());
+        self.addresses.insert(id.0, fun_ptr);
     }
 
-    pub fn get_function_pointer(&self, id: FunctionId) -> Option<fn() -> i64> {
-        self.addresses.get(&id).copied()
+    pub fn get_function_pointer(&self, id: FunctionId) -> fn() -> i64 {
+        assert!(id.0 < self.addresses.len());
+        self.addresses[id.0]
     }
 }
