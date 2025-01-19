@@ -164,7 +164,7 @@ impl MachineCodeGenerator for X64LinuxGenerator {
     fn generate_machine_code(
         &mut self,
         function: &CompiledFunction,
-        _function_catalog: &Box<CompiledFunctionCatalog>,
+        _function_catalog: &CompiledFunctionCatalog,
     ) -> Result<GeneratedMachineCode, BackendError> {
         self.allocate_registers(function);
 

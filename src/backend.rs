@@ -8,7 +8,7 @@ pub trait MachineCodeGenerator {
     fn generate_machine_code(
         &mut self,
         function: &CompiledFunction,
-        function_catalog: &Box<CompiledFunctionCatalog>,
+        function_catalog: &CompiledFunctionCatalog,
     ) -> Result<GeneratedMachineCode, BackendError>;
 }
 

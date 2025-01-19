@@ -464,7 +464,7 @@ impl MachineCodeGenerator for Aarch64Generator {
     fn generate_machine_code(
         &mut self,
         function: &CompiledFunction,
-        function_catalog: &Box<CompiledFunctionCatalog>,
+        function_catalog: &CompiledFunctionCatalog,
     ) -> Result<GeneratedMachineCode, BackendError> {
         self.allocate_registers(function);
 
@@ -587,7 +587,7 @@ impl MachineCodeGenerator for Aarch64Generator {
                         .ok_or_else(|| BackendError::FunctionNotFound(name.to_string()))?;
 
                     let fn_catalog_addr: usize =
-                        unsafe { std::mem::transmute(&**function_catalog) };
+                        function_catalog as *const CompiledFunctionCatalog as usize;
                     let jit_call_trampoline_address: usize =
                         (jit_call_trampoline as fn(_, _) -> _) as usize;
 

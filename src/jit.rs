@@ -29,6 +29,8 @@ impl From<rustix::io::Errno> for MmapError {
     }
 }
 
+// Converts the given slice bytes, containing machine code, into a function pointer. It does so by
+// mmapping a new page, copying the bytes, and then performing a cast.
 unsafe fn to_function_pointer(bytes: &[u8]) -> Result<fn() -> i64, MmapError> {
     #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
     {
@@ -101,6 +103,8 @@ pub fn jit_compile_program(source: &str, main_function_name: &str) -> Result<Jit
     #[cfg(target_arch = "aarch64")]
     let mut gen = Aarch64Generator::default();
 
+    // Create the function catalog and stores it in a box, to ensure that it will be at a fixed
+    // address and not be de-allocated
     let mut function_catalog = Box::new(CompiledFunctionCatalog::new(&compiled_functions));
     let function_catalog_ptr: *const CompiledFunctionCatalog = &*function_catalog;
     println!("function catalog: {:0X}", function_catalog_ptr as usize);
@@ -149,20 +153,28 @@ pub fn jit_compile_program(source: &str, main_function_name: &str) -> Result<Jit
     }
 }
 
+/// This function acts as a trampile to perform functions call from the a jit-ted function.
+/// Since we first compile the function _and then_ mmap-it, we do not have the address of
+/// the called function when we're compiling the callee. Therefore, we use this trampoline.
+/// When we're compiling the caller, we will replace the function to the callee with a call
+/// to this trampoline function, passing the id of the callee. The trampoline will resolve
+/// the actual address to which the callee has been mapped and will then invoke it.
+/// As usual, most problems in computer science can be solved with an additional level of
+/// indirection :-)
 pub fn jit_call_trampoline(
     function_catalog_ptr: *const CompiledFunctionCatalog,
     function_index: usize,
 ) -> i64 {
     println!(
-        "in trampoline with args {:?} {}",
+        "inside trampoline, with args {:?} {}",
         function_catalog_ptr, function_index
     );
     let function_catalog = unsafe { &*function_catalog_ptr };
     let fun = function_catalog.get_function_pointer(FunctionId(function_index));
-    println!("function pointer found: {:?}", fun);
+    println!("  function pointer found: {:?}", fun);
 
     let result = fun();
-    println!("function result: {}", result);
+    println!("  callee function result: {}", result);
     result
 }
 
