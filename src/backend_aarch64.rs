@@ -648,7 +648,6 @@ impl Aarch64Generator {
         let allocations = backend_register_allocator::allocate::<Register>(
             function,
             vec![
-                Register::X8,
                 Register::X9,
                 Register::X10,
                 Register::X11,

@@ -21,7 +21,11 @@ fn main() {
         }
 
         fn f() {
-            return 42;
+            return 42 * g();
+        }
+
+        fn g() {
+            return 2;
         }
     ";
     let jit_program = jit_compile_program(source, "main").expect("program should compile");
