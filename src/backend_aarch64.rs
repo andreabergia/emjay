@@ -1,4 +1,7 @@
-use std::{cmp::max, fmt::{Display, Write}};
+use std::{
+    cmp::max,
+    fmt::{Display, Write},
+};
 
 use crate::{
     backend::{BackendError, CompiledFunctionCatalog, GeneratedMachineCode, MachineCodeGenerator},
@@ -642,14 +645,13 @@ impl MachineCodeGenerator for Aarch64Generator {
                             ))
                         }
                     }
-
                 }
             }
         }
 
         // Replace the prologue and epilogue, now that we know the maximum stack depth
         let stack_depth_to_reserve = (self.max_stack_offset + 15) & !15; // Must be 16-byte aligned
-        instructions[0]= Aarch64Instruction::Stp {
+        instructions[0] = Aarch64Instruction::Stp {
             reg1: Register::X29,
             reg2: Register::X30,
             base: Register::Sp,
