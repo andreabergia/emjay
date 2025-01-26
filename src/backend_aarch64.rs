@@ -1109,6 +1109,62 @@ mod test {
         );
     }
 
+    #[test]
+    fn can_compile_function_calls() {
+        let program = parse_program(
+            "
+            fn f() { return 1 + g(); }
+            fn g() { return 42; }
+            ",
+        )
+        .unwrap();
+        let compiled = frontend::compile(program).unwrap();
+        assert_eq!(compiled.len(), 2);
+
+        let function_catalog = Box::new(CompiledFunctionCatalog::new(&compiled));
+        let fn_catalog_addr: usize =
+            function_catalog.as_ref() as *const CompiledFunctionCatalog as usize;
+        let jit_call_trampoline_address: usize = (jit_call_trampoline as fn(_, _) -> _) as usize;
+
+        let mut gen = Aarch64Generator::default();
+        let machine_code = gen
+            .generate_machine_code(
+                &compiled[0], // f
+                &function_catalog,
+            )
+            .unwrap();
+        assert_eq!(
+            format!(
+                "
+            |stp  x29, x30, [sp, #-48]!
+            |mov  x29, sp
+            |movz x9, 1
+            |str  x19, [x29, #24]
+            |str  x9, [x29, #32]
+            |str  x10, [x29, #40]
+            |str  x11, [x29, #48]
+            |movz x0, {}
+            |movz x1, 1
+            |movz x19, {}
+            |blr x19
+            |ldr  x11, [x29, #48]
+            |ldr  x10, [x29, #40]
+            |ldr  x9, [x29, #32]
+            |ldr  x19, [x29, #24]
+            |mov  x10, x0
+            |add  x11, x9, x10
+            |mov  x0, x11
+            |ldp  x29, x30, [sp], #48
+            |ret
+            |",
+                fn_catalog_addr, jit_call_trampoline_address
+            )
+            .trim_margin()
+            .unwrap(),
+            machine_code.asm
+        );
+    }
+
     proptest! {
         #[test]
         fn mov_immediate_uses_one_instruction_for_16bit_values(n in 0..0xFFFF) {
