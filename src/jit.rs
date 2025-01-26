@@ -183,11 +183,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn can_compile_basic_function() {
+    fn can_generate_valid_basic_function() {
         let source = "fn test() { let a = 2; return a + 1; }";
         let program = super::jit_compile_program(source, "test").expect("function should compile");
-        let res = (program.main_function)() as f64;
+        let res = (program.main_function)() as f64; // Call it!
         assert_eq!(res, 3.0);
+    }
+
+    #[test]
+    fn can_generate_function_calls() {
+        let source = "
+        fn f() { return g() + 1; }
+        fn g() { return 1; }
+        ";
+        let program = super::jit_compile_program(source, "f").expect("function should compile");
+        let res = (program.main_function)() as f64; // Call it!
+        assert_eq!(res, 2.0);
     }
 
     #[test]
