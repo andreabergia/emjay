@@ -17,15 +17,15 @@ mod program_counter;
 fn main() {
     let source = r"
         fn main() {
-            return f() + 1;
+            return 1 + f();
         }
 
         fn f() {
-            return 42 * g();
+            return g() + 1;
         }
 
         fn g() {
-            return 2;
+            return 1;
         }
     ";
     let jit_program = jit_compile_program(source, "main").expect("program should compile");

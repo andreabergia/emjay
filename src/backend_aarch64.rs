@@ -1,4 +1,4 @@
-use std::fmt::{Display, Write};
+use std::{cmp::max, fmt::{Display, Write}};
 
 use crate::{
     backend::{BackendError, CompiledFunctionCatalog, GeneratedMachineCode, MachineCodeGenerator},
@@ -458,6 +458,8 @@ impl Aarch64Instruction {
 pub struct Aarch64Generator {
     locations: Vec<AllocatedLocation<Register>>,
     stack_offset: u32,
+    max_stack_offset: u32,
+    used_registers: Vec<Register>,
 }
 
 impl MachineCodeGenerator for Aarch64Generator {
@@ -469,13 +471,14 @@ impl MachineCodeGenerator for Aarch64Generator {
         self.allocate_registers(function);
 
         let mut instructions = Vec::new();
-        instructions.push(Aarch64Instruction::Stp {
-            reg1: Register::X29,
-            reg2: Register::X30,
-            base: Register::Sp,
-            offset: -32,
-            pre_indexing: true,
-        });
+        let mut ldp_to_fix = Vec::new();
+        self.stack_offset += 16;
+        self.max_stack_offset = self.stack_offset;
+
+        // This will be overwritten at the end, once we have completed computation
+        // of the necessary stack depth
+        instructions.push(Aarch64Instruction::Nop);
+
         instructions.push(Aarch64Instruction::MovSpToReg {
             destination: Register::X29,
         });
@@ -514,12 +517,12 @@ impl MachineCodeGenerator for Aarch64Generator {
                             ))
                         }
                     }
-                    instructions.push(Aarch64Instruction::Ldp {
-                        reg1: Register::X29,
-                        reg2: Register::X30,
-                        base: Register::Sp,
-                        offset: 32,
-                    });
+
+                    // We will replace this with the correct LDP at the end,
+                    // once the final stack depth has been computed
+                    ldp_to_fix.push(instructions.len());
+                    instructions.push(Aarch64Instruction::Nop);
+
                     instructions.push(Aarch64Instruction::Ret);
                 }
 
@@ -591,10 +594,18 @@ impl MachineCodeGenerator for Aarch64Generator {
                     let jit_call_trampoline_address: usize =
                         (jit_call_trampoline as fn(_, _) -> _) as usize;
 
-                    // Leave space to move the address as an immediate to register X19
-                    //self.push(&mut instructions, Register::X19);
-                    //self.push(&mut instructions, Register::X1);
+                    // We will put the jump address in X19
+                    self.push(&mut instructions, Register::X19);
 
+                    // Store all registers being used. We should skip the destination one
+                    // for this instruction, since we will overwrite it, but whatever.
+                    // We generate horrible code anyway... what's one more push/pop pair? :-D
+                    let used_registers = self.used_registers.clone();
+                    for used_register in used_registers.iter().cloned() {
+                        self.push(&mut instructions, used_register);
+                    }
+
+                    // jit_call_trampoline(function_catalog_ptr, called_function_index)
                     instructions.push(Aarch64Instruction::MovImmToReg {
                         register: Register::X0,
                         value: fn_catalog_addr as f64,
@@ -611,6 +622,13 @@ impl MachineCodeGenerator for Aarch64Generator {
                         register: Register::X19,
                     });
 
+                    // Restore registers
+                    for used_register in used_registers.iter().rev().cloned() {
+                        self.pop(&mut instructions, used_register);
+                    }
+                    self.pop(&mut instructions, Register::X19);
+
+                    // Copy result (x1) to the opportune register
                     match self.locations[dest] {
                         AllocatedLocation::Register {
                             register: destination,
@@ -624,21 +642,36 @@ impl MachineCodeGenerator for Aarch64Generator {
                             ))
                         }
                     }
-                    // TODO: enable
-                    //self.pop(&mut instructions, Register::X1);
-                    //self.pop(&mut instructions, Register::X19);
+
                 }
             }
         }
 
+        // Replace the prologue and epilogue, now that we know the maximum stack depth
+        let stack_depth_to_reserve = (self.max_stack_offset + 15) & !15; // Must be 16-byte aligned
+        instructions[0]= Aarch64Instruction::Stp {
+            reg1: Register::X29,
+            reg2: Register::X30,
+            base: Register::Sp,
+            offset: -(stack_depth_to_reserve as i32),
+            pre_indexing: true,
+        };
+        for ldp_to_fix_index in ldp_to_fix {
+            instructions[ldp_to_fix_index] = Aarch64Instruction::Ldp {
+                reg1: Register::X29,
+                reg2: Register::X30,
+                base: Register::Sp,
+                offset: stack_depth_to_reserve as i32,
+            };
+        }
+
+        // Done!
         let mut asm = String::new();
         let mut machine_code: Vec<u8> = Vec::new();
-
         for instruction in instructions {
             let _ = writeln!(&mut asm, "{}", instruction);
             machine_code.extend(instruction.make_machine_code());
         }
-
         Ok(GeneratedMachineCode { asm, machine_code })
     }
 }
@@ -655,9 +688,16 @@ impl Aarch64Generator {
                 Register::X13,
                 Register::X14,
                 Register::X15,
+                // TODO: add X19-X28 and save them before modifying
             ],
         );
         self.locations.extend(allocations);
+
+        for location in self.locations.iter() {
+            if let AllocatedLocation::Register { register } = location {
+                self.used_registers.push(*register);
+            }
+        }
     }
 
     fn do_binop(
@@ -695,6 +735,7 @@ impl Aarch64Generator {
 
     fn push(&mut self, instructions: &mut Vec<Aarch64Instruction>, register: Register) {
         self.stack_offset += 8;
+        self.max_stack_offset = max(self.max_stack_offset, self.stack_offset);
         instructions.push(Aarch64Instruction::Str {
             source: register,
             base: Register::X29,
@@ -703,12 +744,12 @@ impl Aarch64Generator {
     }
 
     fn pop(&mut self, instructions: &mut Vec<Aarch64Instruction>, register: Register) {
-        self.stack_offset -= 8;
         instructions.push(Aarch64Instruction::Ldr {
             destination: register,
             base: Register::X29,
             offset: self.stack_offset,
         });
+        self.stack_offset -= 8;
     }
 }
 
