@@ -6,7 +6,7 @@ use std::{
 use crate::{
     backend::{BackendError, CompiledFunctionCatalog, GeneratedMachineCode, MachineCodeGenerator},
     backend_register_allocator::{self, AllocatedLocation},
-    ir::{CompiledFunction, Instruction, RegisterIndex},
+    ir::{CompiledFunction, IrInstruction, IrRegister},
     jit::jit_call_trampoline,
 };
 
@@ -488,7 +488,7 @@ impl MachineCodeGenerator for Aarch64Generator {
 
         for instruction in function.body.iter() {
             match instruction {
-                Instruction::Mvi { dest, val } => {
+                IrInstruction::Mvi { dest, val } => {
                     let dest: usize = (*dest).into();
                     match self.locations[dest] {
                         AllocatedLocation::Register { register } => {
@@ -505,7 +505,7 @@ impl MachineCodeGenerator for Aarch64Generator {
                     }
                 }
 
-                Instruction::Ret { reg } => {
+                IrInstruction::Ret { reg } => {
                     let dest: usize = (*reg).into();
                     match self.locations[dest] {
                         AllocatedLocation::Register { register } => {
@@ -529,7 +529,7 @@ impl MachineCodeGenerator for Aarch64Generator {
                     instructions.push(Aarch64Instruction::Ret);
                 }
 
-                Instruction::Add { dest, op1, op2 } => {
+                IrInstruction::Add { dest, op1, op2 } => {
                     self.do_binop(
                         &mut instructions,
                         *dest,
@@ -543,7 +543,7 @@ impl MachineCodeGenerator for Aarch64Generator {
                     )?;
                 }
 
-                Instruction::Sub { dest, op1, op2 } => {
+                IrInstruction::Sub { dest, op1, op2 } => {
                     self.do_binop(
                         &mut instructions,
                         *dest,
@@ -557,7 +557,7 @@ impl MachineCodeGenerator for Aarch64Generator {
                     )?;
                 }
 
-                Instruction::Mul { dest, op1, op2 } => {
+                IrInstruction::Mul { dest, op1, op2 } => {
                     self.do_binop(
                         &mut instructions,
                         *dest,
@@ -571,7 +571,7 @@ impl MachineCodeGenerator for Aarch64Generator {
                     )?;
                 }
 
-                Instruction::Div { dest, op1, op2 } => {
+                IrInstruction::Div { dest, op1, op2 } => {
                     self.do_binop(
                         &mut instructions,
                         *dest,
@@ -585,7 +585,7 @@ impl MachineCodeGenerator for Aarch64Generator {
                     )?;
                 }
 
-                Instruction::Call { dest, name } => {
+                IrInstruction::Call { dest, name } => {
                     let dest: usize = (*dest).into();
 
                     let called_function_index = function_catalog
@@ -705,9 +705,9 @@ impl Aarch64Generator {
     fn do_binop(
         &self,
         instructions: &mut Vec<Aarch64Instruction>,
-        dest: RegisterIndex,
-        op1: RegisterIndex,
-        op2: RegisterIndex,
+        dest: IrRegister,
+        op1: IrRegister,
+        op2: IrRegister,
         callback: impl Fn(Register, Register, Register) -> Aarch64Instruction,
     ) -> Result<(), BackendError> {
         let op1: usize = op1.into();

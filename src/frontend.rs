@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use crate::{
     ast::{Block, BlockElement, Expression, Function, Program},
-    ir::{CompiledFunction, Instruction, RegisterIndex},
+    ir::{CompiledFunction, IrInstruction, IrRegister},
 };
 
 #[derive(Debug, Error)]
@@ -39,7 +39,7 @@ enum Symbol<'input> {
     },
     Variable {
         name: &'input str,
-        allocated_register: RegisterIndex,
+        allocated_register: IrRegister,
     },
 }
 
@@ -86,7 +86,7 @@ impl<'input> SymbolTable<'input> {
     }
 
     // TODO: we shouldn't need two lookups in the table
-    fn store_location(&mut self, name: &str, register: RegisterIndex) {
+    fn store_location(&mut self, name: &str, register: IrRegister) {
         let symbol = self.names_to_symbols.get_mut(name);
         match symbol {
             None => match &self.parent {
@@ -105,7 +105,7 @@ impl<'input> SymbolTable<'input> {
 
 #[derive(Default)]
 struct FunctionCompiler {
-    next_free_reg: RegisterIndex,
+    next_free_reg: IrRegister,
 }
 
 impl<'input> FunctionCompiler {
@@ -115,7 +115,7 @@ impl<'input> FunctionCompiler {
         parent_symbol_table: SymbolTableRef<'input>,
     ) -> Result<CompiledFunction<'input>, FrontendError> {
         let symbol_table = SymbolTable::with_parent(parent_symbol_table);
-        let mut body: Vec<Instruction> = Vec::new();
+        let mut body: Vec<IrInstruction> = Vec::new();
         self.compile_block(&mut body, &f.block, symbol_table)?;
         Ok(CompiledFunction {
             name: f.name,
@@ -126,7 +126,7 @@ impl<'input> FunctionCompiler {
 
     fn compile_block(
         &mut self,
-        body: &mut Vec<Instruction>,
+        body: &mut Vec<IrInstruction>,
         block: &Block<'input>,
         parent_symbol_table: SymbolTableRef<'input>,
     ) -> Result<(), FrontendError> {
@@ -163,7 +163,7 @@ impl<'input> FunctionCompiler {
                 }
                 BlockElement::ReturnStatement(expression) => {
                     let reg = self.compile_expression(body, expression, symbol_table.clone())?;
-                    body.push(Instruction::Ret { reg });
+                    body.push(IrInstruction::Ret { reg });
                 }
             }
         }
@@ -172,10 +172,10 @@ impl<'input> FunctionCompiler {
 
     fn compile_expression(
         &mut self,
-        body: &mut Vec<Instruction>,
+        body: &mut Vec<IrInstruction>,
         expression: &Expression,
         symbol_table: SymbolTableRef<'input>,
-    ) -> Result<RegisterIndex, FrontendError> {
+    ) -> Result<IrRegister, FrontendError> {
         match expression {
             Expression::Identifier(name) => {
                 // TODO: proper error
@@ -193,12 +193,12 @@ impl<'input> FunctionCompiler {
             }
             Expression::Number(n) => {
                 let reg = self.allocate_reg();
-                body.push(Instruction::Mvi { dest: reg, val: *n });
+                body.push(IrInstruction::Mvi { dest: reg, val: *n });
                 Ok(reg)
             }
             Expression::FunctionCall(call) => {
                 let dest = self.allocate_reg();
-                body.push(Instruction::Call {
+                body.push(IrInstruction::Call {
                     dest,
                     name: call.name.to_string(),
                 });
@@ -209,28 +209,28 @@ impl<'input> FunctionCompiler {
                 let op1 = self.compile_expression(body, left, symbol_table.clone())?;
                 let op2 = self.compile_expression(body, right, symbol_table)?;
                 let dest = self.allocate_reg();
-                body.push(Instruction::Add { dest, op1, op2 });
+                body.push(IrInstruction::Add { dest, op1, op2 });
                 Ok(dest)
             }
             Expression::Sub(left, right) => {
                 let op1 = self.compile_expression(body, left, symbol_table.clone())?;
                 let op2 = self.compile_expression(body, right, symbol_table)?;
                 let dest = self.allocate_reg();
-                body.push(Instruction::Sub { dest, op1, op2 });
+                body.push(IrInstruction::Sub { dest, op1, op2 });
                 Ok(dest)
             }
             Expression::Mul(left, right) => {
                 let op1 = self.compile_expression(body, left, symbol_table.clone())?;
                 let op2 = self.compile_expression(body, right, symbol_table)?;
                 let dest = self.allocate_reg();
-                body.push(Instruction::Mul { dest, op1, op2 });
+                body.push(IrInstruction::Mul { dest, op1, op2 });
                 Ok(dest)
             }
             Expression::Div(left, right) => {
                 let op1 = self.compile_expression(body, left, symbol_table.clone())?;
                 let op2 = self.compile_expression(body, right, symbol_table)?;
                 let dest = self.allocate_reg();
-                body.push(Instruction::Div { dest, op1, op2 });
+                body.push(IrInstruction::Div { dest, op1, op2 });
                 Ok(dest)
             }
 
@@ -238,7 +238,7 @@ impl<'input> FunctionCompiler {
         }
     }
 
-    fn allocate_reg(&mut self) -> RegisterIndex {
+    fn allocate_reg(&mut self) -> IrRegister {
         self.next_free_reg.inc()
     }
 }

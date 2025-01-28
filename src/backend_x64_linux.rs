@@ -3,7 +3,7 @@ use std::fmt::{Display, Write};
 use crate::{
     backend::{BackendError, CompiledFunctionCatalog, GeneratedMachineCode, MachineCodeGenerator},
     backend_register_allocator::{self, AllocatedLocation},
-    ir::{CompiledFunction, Instruction, RegisterIndex},
+    ir::{CompiledFunction, IrInstruction, IrRegister},
 };
 
 const NUM_SIZE: usize = 8;
@@ -180,7 +180,7 @@ impl MachineCodeGenerator for X64LinuxGenerator {
 
         for instruction in function.body.iter() {
             match instruction {
-                Instruction::Mvi { dest, val } => {
+                IrInstruction::Mvi { dest, val } => {
                     let dest: usize = (*dest).into();
                     match self.locations[dest] {
                         AllocatedLocation::Stack { .. } => {
@@ -197,7 +197,7 @@ impl MachineCodeGenerator for X64LinuxGenerator {
                     }
                 }
 
-                Instruction::Ret { reg } => {
+                IrInstruction::Ret { reg } => {
                     self.move_to_accumulator(reg, &mut instructions)?;
 
                     // Epilogue and then return
@@ -207,7 +207,7 @@ impl MachineCodeGenerator for X64LinuxGenerator {
                     instructions.push(X64Instruction::Retn);
                 }
 
-                Instruction::Add { dest, op1, op2 } => self.do_bin_op(
+                IrInstruction::Add { dest, op1, op2 } => self.do_bin_op(
                     &mut instructions,
                     op1,
                     op2,
@@ -216,7 +216,7 @@ impl MachineCodeGenerator for X64LinuxGenerator {
                         instructions.push(X64Instruction::AddRegToRax { register })
                     },
                 )?,
-                Instruction::Sub { dest, op1, op2 } => self.do_bin_op(
+                IrInstruction::Sub { dest, op1, op2 } => self.do_bin_op(
                     &mut instructions,
                     op1,
                     op2,
@@ -225,7 +225,7 @@ impl MachineCodeGenerator for X64LinuxGenerator {
                         instructions.push(X64Instruction::SubRegFromRax { register })
                     },
                 )?,
-                Instruction::Mul { dest, op1, op2 } => self.do_bin_op(
+                IrInstruction::Mul { dest, op1, op2 } => self.do_bin_op(
                     &mut instructions,
                     op1,
                     op2,
@@ -234,7 +234,7 @@ impl MachineCodeGenerator for X64LinuxGenerator {
                         instructions.push(X64Instruction::MulRegToRax { register })
                     },
                 )?,
-                Instruction::Div { dest, op1, op2 } => self.do_bin_op(
+                IrInstruction::Div { dest, op1, op2 } => self.do_bin_op(
                     &mut instructions,
                     op1,
                     op2,
@@ -277,7 +277,7 @@ impl MachineCodeGenerator for X64LinuxGenerator {
                         }
                     },
                 )?,
-                Instruction::Call { .. } => todo!("function call"),
+                IrInstruction::Call { .. } => todo!("function call"),
             }
         }
 
@@ -304,7 +304,7 @@ impl X64LinuxGenerator {
 
     fn move_to_accumulator(
         &mut self,
-        reg: &RegisterIndex,
+        reg: &IrRegister,
         instructions: &mut Vec<X64Instruction>,
     ) -> Result<(), BackendError> {
         let reg: usize = (*reg).into();
@@ -325,9 +325,9 @@ impl X64LinuxGenerator {
     fn do_bin_op(
         &mut self,
         instructions: &mut Vec<X64Instruction>,
-        op1: &RegisterIndex,
-        op2: &RegisterIndex,
-        dest: &RegisterIndex,
+        op1: &IrRegister,
+        op2: &IrRegister,
+        dest: &IrRegister,
         lambda: impl Fn(&mut Vec<X64Instruction>, Register),
     ) -> Result<(), BackendError> {
         self.move_to_accumulator(op1, instructions)?;

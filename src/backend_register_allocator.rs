@@ -2,7 +2,7 @@ use core::fmt;
 use std::collections::VecDeque;
 
 use crate::{
-    ir::{CompiledFunction, RegisterIndex},
+    ir::{CompiledFunction, IrRegister},
     program_counter::ProgramCounter,
 };
 
@@ -53,9 +53,9 @@ fn allocate_ir_regs_to_logical_hw_regs(
     // Key: ir_reg, value: logical_hw_reg
     let mut ir_reg_allocation = vec![NOT_ALLOCATED; function.num_used_registers];
     // Key: logical_hw_reg, value: ir_reg
-    let mut logical_hw_regs_content: Vec<RegisterIndex> = Vec::new();
+    let mut logical_hw_regs_content: Vec<IrRegister> = Vec::new();
 
-    const FREE: RegisterIndex = RegisterIndex::from_u32(u32::MAX);
+    const FREE: IrRegister = IrRegister::from_u32(u32::MAX);
     let mut free_logical_hw_registers: Vec<LogicalHwRegister> = Vec::new();
 
     for (pc, instruction) in function.body.iter().enumerate() {
