@@ -35,7 +35,13 @@ fn parse_expression(rule: Pair<'_, Rule>) -> Expression {
 fn parse_function_call(rule: Pair<'_, Rule>) -> FunctionCall {
     let mut inner = rule.into_inner();
     let name = inner.next().unwrap().as_str();
-    FunctionCall { name }
+    let args = inner
+        .next()
+        .unwrap()
+        .into_inner()
+        .map(parse_expression)
+        .collect();
+    FunctionCall { name, args }
 }
 
 fn parse_statement_let(rule: Pair<'_, Rule>) -> BlockElement {
@@ -73,8 +79,14 @@ fn parse_block(rule: Pair<'_, Rule>) -> Block {
 fn parse_function(rule: Pair<'_, Rule>) -> Function {
     let mut rule = rule.into_inner();
     let name = rule.next().unwrap().as_str();
+    let args = rule
+        .next()
+        .unwrap()
+        .into_inner()
+        .map(|arg| arg.as_str())
+        .collect();
     let block = parse_block(rule.next().unwrap());
-    Function { name, block }
+    Function { name, args, block }
 }
 
 #[derive(Debug, Error)]
@@ -110,8 +122,8 @@ mod tests {
     #[test]
     fn can_parse_program() {
         let program = parse_program(
-            r"fn foo() {
-            let x = -y + 3 * (z() - 1);
+            r"fn foo(y, w) {
+            let x = -y + 3 * (z(2, w) - 1);
             {
                 let z = 42;
             }
@@ -122,6 +134,7 @@ mod tests {
         assert_eq!(
             vec![Function {
                 name: "foo",
+                args: vec!["y", "w"],
                 block: vec![
                     BlockElement::LetStatement {
                         name: "x",
@@ -130,7 +143,13 @@ mod tests {
                             Box::new(Expression::Mul(
                                 Box::new(Expression::Number(3f64)),
                                 Box::new(Expression::Sub(
-                                    Box::new(Expression::FunctionCall(FunctionCall { name: "z" })),
+                                    Box::new(Expression::FunctionCall(FunctionCall {
+                                        name: "z",
+                                        args: vec![
+                                            Expression::Number(2f64),
+                                            Expression::Identifier("w")
+                                        ]
+                                    })),
                                     Box::new(Expression::Number(1f64))
                                 ))
                             ))

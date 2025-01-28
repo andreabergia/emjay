@@ -1,6 +1,7 @@
 #[derive(Debug, PartialEq)]
 pub struct Function<'input> {
     pub name: &'input str,
+    pub args: Vec<&'input str>,
     pub block: Block<'input>,
 }
 
@@ -25,6 +26,7 @@ pub type Block<'input> = Vec<BlockElement<'input>>;
 #[derive(Debug, PartialEq)]
 pub struct FunctionCall<'input> {
     pub name: &'input str,
+    pub args: Vec<Expression<'input>>,
 }
 
 #[derive(Debug, PartialEq)]
