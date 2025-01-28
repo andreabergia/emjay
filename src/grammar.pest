@@ -1,6 +1,7 @@
 program = { SOI ~ functionDeclaration+ ~ EOI }
 
-functionDeclaration = { "fn" ~ identifier ~ "(" ~ ")" ~ block }
+functionDeclaration = { "fn" ~ identifier ~ "(" ~ functionDeclarationParameters? ~ ")" ~ block }
+functionDeclarationParameters = { identifier ~ ("," ~ identifier)* }
 
 block = { "{" ~ (statement | block)* ~ "}" }
 
@@ -23,7 +24,7 @@ expression = { prefix? ~ factor ~ (infix ~ prefix? ~ factor )* }
       prefix   =  _{ neg }
         neg    =   { "-" } // Negation
       factor   =  _{ number | "(" ~ expression ~ ")" | functionCall | identifier }
-  functionCall =   { identifier ~ "(" ~ ")" }
+  functionCall =   { identifier ~ "(" ~ (expression ~ ("," ~ expression)*)? ~ ")" }
 
 number = @{"-"? ~ (hexNumber | decimalNumber)}
 

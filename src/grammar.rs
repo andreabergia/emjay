@@ -52,6 +52,8 @@ mod tests {
     #[test]
     fn grammar_can_parse_function_call() {
         assert_can_be_parsed_as("f()", Rule::functionCall);
+        assert_can_be_parsed_as("f(1)", Rule::functionCall);
+        assert_can_be_parsed_as("f(a, 3 + b)", Rule::functionCall);
     }
 
     #[test]
@@ -90,6 +92,8 @@ mod tests {
     #[test]
     fn grammar_can_parse_function() {
         assert_can_be_parsed_as("fn main() { let x = y; }", Rule::functionDeclaration);
+        assert_can_be_parsed_as("fn f(a) {}", Rule::functionDeclaration);
+        assert_can_be_parsed_as("fn f(a, b, c, d, e) {}", Rule::functionDeclaration);
     }
 
     #[test]
