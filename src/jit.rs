@@ -153,8 +153,8 @@ pub fn jit_compile_program(source: &str, main_function_name: &str) -> Result<Jit
     }
 }
 
-/// This function acts as a trampile to perform functions call from the a jit-ted function.
-/// Since we first compile the function _and then_ mmap-it, we do not have the address of
+/// This function acts as a trampoline to perform functions call from the a jit-ted function.
+/// Since we first compile the function and then mmap-it, we do not have the address of
 /// the called function when we're compiling the callee. Therefore, we use this trampoline.
 /// When we're compiling the caller, we will replace the function to the callee with a call
 /// to this trampoline function, passing the id of the callee. The trampoline will resolve
