@@ -699,7 +699,11 @@ impl Aarch64Generator {
 
         for location in self.locations.iter() {
             if let AllocatedLocation::Register { register } = location {
-                self.used_registers.push(*register);
+                // This looks quadratic, but actually we only have 7 registers
+                // so it's 7 * N i.e. linear
+                if !self.used_registers.contains(register) {
+                    self.used_registers.push(*register);
+                }
             }
         }
     }
