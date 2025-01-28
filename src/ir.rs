@@ -90,6 +90,7 @@ pub enum IrInstruction {
     Call {
         dest: IrRegister,
         name: String,
+        args: Vec<IrRegister>,
     },
 }
 
@@ -103,7 +104,11 @@ impl IrInstruction {
             IrInstruction::Mul { dest, op1, op2 } => vec![*dest, *op1, *op2].into_iter(),
             IrInstruction::Div { dest, op1, op2 } => vec![*dest, *op1, *op2].into_iter(),
             IrInstruction::Ret { reg } => vec![*reg].into_iter(),
-            IrInstruction::Call { dest, .. } => vec![*dest].into_iter(),
+            IrInstruction::Call { dest, args, .. } => vec![*dest]
+                .into_iter()
+                .chain(args.iter().copied())
+                .collect::<Vec<_>>()
+                .into_iter(),
         }
     }
 }
@@ -119,22 +124,31 @@ pub struct CompiledFunction<'input> {
 impl fmt::Display for IrInstruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            IrInstruction::Mvi { dest, val } => write!(f, "mvi @r{}, {}", dest, val),
-            IrInstruction::MvArg { dest, arg } => write!(f, "mva @r{}, a{}", dest, arg),
+            IrInstruction::Mvi { dest, val } => write!(f, "mvi  @r{}, {}", dest, val),
+            IrInstruction::MvArg { dest, arg } => write!(f, "mva  @r{}, a{}", dest, arg),
             IrInstruction::Add { dest, op1, op2 } => {
-                write!(f, "add @r{}, r{}, r{}", dest, op1, op2)
+                write!(f, "add  @r{}, r{}, r{}", dest, op1, op2)
             }
             IrInstruction::Sub { dest, op1, op2 } => {
-                write!(f, "sub @r{}, r{}, r{}", dest, op1, op2)
+                write!(f, "sub  @r{}, r{}, r{}", dest, op1, op2)
             }
             IrInstruction::Mul { dest, op1, op2 } => {
-                write!(f, "mul @r{}, r{}, r{}", dest, op1, op2)
+                write!(f, "mul  @r{}, r{}, r{}", dest, op1, op2)
             }
             IrInstruction::Div { dest, op1, op2 } => {
-                write!(f, "div @r{}, r{}, r{}", dest, op1, op2)
+                write!(f, "div  @r{}, r{}, r{}", dest, op1, op2)
             }
-            IrInstruction::Ret { reg } => write!(f, "ret r{}", reg),
-            IrInstruction::Call { dest, name } => write!(f, "call @r{} {}", dest, name),
+            IrInstruction::Ret { reg } => write!(f, "ret  r{}", reg),
+            IrInstruction::Call { dest, name, args } => {
+                write!(f, "call @r{}, {}(", dest, name)?;
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "r{}", arg)?;
+                }
+                write!(f, ")")
+            }
         }
     }
 }
@@ -209,10 +223,11 @@ pub mod builders {
         }
     }
 
-    pub fn call(dest: u32, name: &str) -> IrInstruction {
+    pub fn call(dest: u32, name: &str, args: Vec<u32>) -> IrInstruction {
         IrInstruction::Call {
             dest: IrRegister::from_u32(dest),
             name: name.to_string(),
+            args: args.into_iter().map(IrRegister::from_u32).collect(),
         }
     }
 }

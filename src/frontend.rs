@@ -177,14 +177,35 @@ impl<'input> FunctionCompiler {
                 }
                 BlockElement::AssignmentStatement { name, expression } => {
                     let existing_symbol = symbol_table.borrow().lookup(name);
-                    if let Some(Symbol::Variable { .. }) = existing_symbol {
-                        let reg =
-                            self.compile_expression(body, expression, symbol_table.clone())?;
-                        symbol_table.borrow_mut().store_location(name, reg);
-                    } else {
-                        return Err(FrontendError::VariableNotDefined {
-                            name: name.to_string(),
-                        });
+                    match existing_symbol {
+                        Some(Symbol::Variable { .. }) => {
+                            let reg =
+                                self.compile_expression(body, expression, symbol_table.clone())?;
+                            symbol_table.borrow_mut().store_location(name, reg);
+                        }
+                        Some(Symbol::Argument { name, index }) => {
+                            let reg = self.allocate_reg();
+                            body.push(IrInstruction::MvArg {
+                                dest: reg,
+                                arg: index.into(),
+                            });
+
+                            // Overwrite the entry in the symbol table so that future lookups will not need
+                            // to copy again the argument into a register
+                            symbol_table.borrow_mut().put(Symbol::Variable {
+                                name,
+                                allocated_register: reg,
+                            });
+
+                            let reg =
+                                self.compile_expression(body, expression, symbol_table.clone())?;
+                            symbol_table.borrow_mut().store_location(name, reg);
+                        }
+                        _ => {
+                            return Err(FrontendError::VariableNotDefined {
+                                name: name.to_string(),
+                            });
+                        }
                     }
                 }
                 BlockElement::ReturnStatement(expression) => {
@@ -209,12 +230,20 @@ impl<'input> FunctionCompiler {
                     Some(Symbol::Variable {
                         allocated_register, ..
                     }) => Ok(allocated_register),
-                    Some(Symbol::Argument { index, .. }) => {
+                    Some(Symbol::Argument { name, index }) => {
                         let reg = self.allocate_reg();
                         body.push(IrInstruction::MvArg {
                             dest: reg,
                             arg: index.into(),
                         });
+
+                        // Overwrite the entry in the symbol table so that future lookups will not need
+                        // to copy again the argument into a register
+                        symbol_table.borrow_mut().put(Symbol::Variable {
+                            name,
+                            allocated_register: reg,
+                        });
+
                         Ok(reg)
                     }
                     _ => Err(FrontendError::VariableNotDefined {
@@ -229,9 +258,15 @@ impl<'input> FunctionCompiler {
             }
             Expression::FunctionCall(call) => {
                 let dest = self.allocate_reg();
+                let args = call
+                    .args
+                    .iter()
+                    .map(|arg| self.compile_expression(body, arg, symbol_table.clone()))
+                    .collect::<Result<Vec<_>, _>>()?;
                 body.push(IrInstruction::Call {
                     dest,
                     name: call.name.to_string(),
+                    args,
                 });
                 Ok(dest)
             }
@@ -284,27 +319,37 @@ mod test {
 
     #[test]
     fn happy_path() {
-        let program =
-            parse_program("fn the_answer(x) { let a = 3; return a + x - 2 * 3 / f(); }").unwrap();
+        let program = parse_program(
+            r"
+            fn the_answer(x) {
+                let a = 3;
+                x = x + 1;
+                return a + x - 2 * 3 / f(a, x);
+            }",
+        )
+        .unwrap();
         let compiled = compile(program).unwrap();
         assert_eq!(compiled.len(), 1);
 
         let f = &compiled[0];
+        println!("f: {}", f);
         assert_eq!(f.name, "the_answer");
-        assert_eq!(f.num_used_registers, 9);
+        assert_eq!(f.num_used_registers, 11);
         assert_eq!(
             f.body,
             vec![
                 mvi(0, 3.0),
                 mvarg(1, 0),
-                add(2, 0, 1),
-                mvi(3, 2.0),
-                mvi(4, 3.0),
-                mul(5, 3, 4),
-                call(6, "f"),
-                div(7, 5, 6),
-                sub(8, 2, 7),
-                ret(8),
+                mvi(2, 1.0),
+                add(3, 1, 2),
+                add(4, 0, 3),
+                mvi(5, 2.0),
+                mvi(6, 3.0),
+                mul(7, 5, 6),
+                call(8, "f", vec![0, 3]),
+                div(9, 7, 8),
+                sub(10, 4, 9),
+                ret(10),
             ]
         );
     }

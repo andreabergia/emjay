@@ -587,7 +587,7 @@ impl MachineCodeGenerator for Aarch64Generator {
                     )?;
                 }
 
-                IrInstruction::Call { dest, name } => {
+                IrInstruction::Call { dest, name, args } => {
                     let dest: usize = (*dest).into();
 
                     let called_function_index = function_catalog
