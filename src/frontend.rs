@@ -19,6 +19,8 @@ pub enum FrontendError {
         name: String,
         // TODO: location: SourceLocation,
     },
+    #[error("variable \"{name}\" cannot shadow function argument with the same name")]
+    VariableCannotShadowArgument { name: String },
 }
 
 pub fn compile(program: Program) -> Result<Vec<CompiledFunction>, FrontendError> {
@@ -41,6 +43,10 @@ enum Symbol<'input> {
         name: &'input str,
         allocated_register: IrRegister,
     },
+    Argument {
+        name: &'input str,
+        index: usize,
+    },
 }
 
 impl<'input> Symbol<'input> {
@@ -48,6 +54,7 @@ impl<'input> Symbol<'input> {
         match self {
             Symbol::Function { name } => name,
             Symbol::Variable { name, .. } => name,
+            Symbol::Argument { name, .. } => name,
         }
     }
 }
@@ -96,6 +103,7 @@ impl<'input> SymbolTable<'input> {
                 }
             },
             Some(Symbol::Function { .. }) => panic!("cannot assign location of function {}", name),
+            Some(Symbol::Argument { .. }) => panic!("cannot assign location of arguments {}", name),
             Some(Symbol::Variable {
                 allocated_register, ..
             }) => *allocated_register = register,
@@ -116,12 +124,22 @@ impl<'input> FunctionCompiler {
     ) -> Result<CompiledFunction<'input>, FrontendError> {
         let symbol_table = SymbolTable::with_parent(parent_symbol_table);
         let mut body: Vec<IrInstruction> = Vec::new();
+        Self::define_args(f, symbol_table.clone());
         self.compile_block(&mut body, &f.block, symbol_table)?;
         Ok(CompiledFunction {
             name: f.name,
+            num_args: f.args.len(),
             num_used_registers: usize::from(self.next_free_reg),
             body,
         })
+    }
+
+    fn define_args(f: &Function<'input>, symbol_table: SymbolTableRef<'input>) {
+        for (index, arg) in f.args.iter().enumerate() {
+            symbol_table
+                .borrow_mut()
+                .put(Symbol::Argument { name: arg, index });
+        }
     }
 
     fn compile_block(
@@ -138,10 +156,18 @@ impl<'input> FunctionCompiler {
                     self.compile_block(body, nested, symbol_table.clone())?
                 }
                 BlockElement::LetStatement { name, expression } => {
-                    if let Some(Symbol::Variable { .. }) = symbol_table.borrow().lookup(name) {
-                        return Err(FrontendError::VariableAlreadyDefined {
-                            name: name.to_string(),
-                        });
+                    match symbol_table.borrow().lookup(name) {
+                        Some(Symbol::Variable { .. }) => {
+                            return Err(FrontendError::VariableAlreadyDefined {
+                                name: name.to_string(),
+                            });
+                        }
+                        Some(Symbol::Argument { .. }) => {
+                            return Err(FrontendError::VariableCannotShadowArgument {
+                                name: name.to_string(),
+                            });
+                        }
+                        _ => (),
                     }
                     let reg = self.compile_expression(body, expression, symbol_table.clone())?;
                     symbol_table.borrow_mut().put(Symbol::Variable {
@@ -178,17 +204,22 @@ impl<'input> FunctionCompiler {
     ) -> Result<IrRegister, FrontendError> {
         match expression {
             Expression::Identifier(name) => {
-                // TODO: proper error
                 let symbol = symbol_table.borrow().lookup(name);
-                if let Some(Symbol::Variable {
-                    allocated_register, ..
-                }) = symbol
-                {
-                    Ok(allocated_register)
-                } else {
-                    Err(FrontendError::VariableNotDefined {
+                match symbol {
+                    Some(Symbol::Variable {
+                        allocated_register, ..
+                    }) => Ok(allocated_register),
+                    Some(Symbol::Argument { index, .. }) => {
+                        let reg = self.allocate_reg();
+                        body.push(IrInstruction::MvArg {
+                            dest: reg,
+                            arg: index.into(),
+                        });
+                        Ok(reg)
+                    }
+                    _ => Err(FrontendError::VariableNotDefined {
                         name: name.to_string(),
-                    })
+                    }),
                 }
             }
             Expression::Number(n) => {
@@ -247,14 +278,14 @@ impl<'input> FunctionCompiler {
 mod test {
     use super::*;
     use crate::{
-        ir::builders::{add, call, div, mul, mvi, ret, sub},
+        ir::builders::{add, call, div, mul, mvarg, mvi, ret, sub},
         parser::*,
     };
 
     #[test]
-    fn can_compile_variable_declaration_and_math() {
+    fn happy_path() {
         let program =
-            parse_program("fn the_answer() { let a = 3; return a + 1 - 2 * 3 / f(); }").unwrap();
+            parse_program("fn the_answer(x) { let a = 3; return a + x - 2 * 3 / f(); }").unwrap();
         let compiled = compile(program).unwrap();
         assert_eq!(compiled.len(), 1);
 
@@ -265,7 +296,7 @@ mod test {
             f.body,
             vec![
                 mvi(0, 3.0),
-                mvi(1, 1.0),
+                mvarg(1, 0),
                 add(2, 0, 1),
                 mvi(3, 2.0),
                 mvi(4, 3.0),
@@ -344,31 +375,45 @@ mod test {
     fn compile_error_variable_declared_in_nested_block() {
         let program = parse_program(
             r"fn f() {
-            {
-                let a = 1;
-            }
-            return a;
-        }",
+                {
+                    let a = 1;
+                }
+                return a;
+            }",
         )
         .unwrap();
         let error = compile(program).unwrap_err();
         assert_eq!(error.to_string(), "variable \"a\" not defined");
     }
 
-    // TODO: maybe this should be allowed?
     #[test]
-    fn compile_error_variable_cannot_be_shadowed_in_nesterd_block() {
+    fn compile_error_variable_cannot_be_shadowed_in_nested_block() {
         let program = parse_program(
             r"fn f() {
-            let a = 1;
-            {
-                let a = 2;
-            }
-            return a;
-        }",
+                let a = 1;
+                {
+                    let a = 2;
+                }
+                return a;
+            }",
         )
         .unwrap();
         let error = compile(program).unwrap_err();
         assert_eq!(error.to_string(), "variable \"a\" already defined");
+    }
+
+    #[test]
+    fn compile_error_fn_arg_cannot_be_shadowed() {
+        let program = parse_program(
+            r"fn f(x) {
+                let x = 1;
+            }",
+        )
+        .unwrap();
+        let error = compile(program).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "variable \"x\" cannot shadow function argument with the same name"
+        );
     }
 }

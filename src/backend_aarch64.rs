@@ -505,6 +505,8 @@ impl MachineCodeGenerator for Aarch64Generator {
                     }
                 }
 
+                IrInstruction::MvArg { dest, arg } => todo!(),
+
                 IrInstruction::Ret { reg } => {
                     let dest: usize = (*reg).into();
                     match self.locations[dest] {

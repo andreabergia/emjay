@@ -29,13 +29,40 @@ impl IrRegister {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ArgumentIndex {
+    value: usize,
+}
+
+impl From<ArgumentIndex> for usize {
+    fn from(value: ArgumentIndex) -> Self {
+        value.value
+    }
+}
+
+impl From<usize> for ArgumentIndex {
+    fn from(value: usize) -> Self {
+        ArgumentIndex { value }
+    }
+}
+
+impl fmt::Display for ArgumentIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.value)
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub enum IrInstruction {
-    // Move immediate
     Mvi {
         dest: IrRegister,
         val: f64,
     },
+    MvArg {
+        dest: IrRegister,
+        arg: ArgumentIndex,
+    },
+
     Add {
         dest: IrRegister,
         op1: IrRegister,
@@ -56,6 +83,7 @@ pub enum IrInstruction {
         op1: IrRegister,
         op2: IrRegister,
     },
+
     Ret {
         reg: IrRegister,
     },
@@ -68,7 +96,8 @@ pub enum IrInstruction {
 impl IrInstruction {
     pub fn operands(&self) -> impl Iterator<Item = IrRegister> {
         match self {
-            IrInstruction::Mvi { dest, val: _ } => vec![*dest].into_iter(),
+            IrInstruction::Mvi { dest, .. } => vec![*dest].into_iter(),
+            IrInstruction::MvArg { dest, .. } => vec![*dest].into_iter(),
             IrInstruction::Add { dest, op1, op2 } => vec![*dest, *op1, *op2].into_iter(),
             IrInstruction::Sub { dest, op1, op2 } => vec![*dest, *op1, *op2].into_iter(),
             IrInstruction::Mul { dest, op1, op2 } => vec![*dest, *op1, *op2].into_iter(),
@@ -82,6 +111,7 @@ impl IrInstruction {
 #[derive(Debug)]
 pub struct CompiledFunction<'input> {
     pub name: &'input str,
+    pub num_args: usize,
     pub body: Vec<IrInstruction>,
     pub num_used_registers: usize,
 }
@@ -90,6 +120,7 @@ impl fmt::Display for IrInstruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             IrInstruction::Mvi { dest, val } => write!(f, "mvi @r{}, {}", dest, val),
+            IrInstruction::MvArg { dest, arg } => write!(f, "mva @r{}, a{}", dest, arg),
             IrInstruction::Add { dest, op1, op2 } => {
                 write!(f, "add @r{}, r{}, r{}", dest, op1, op2)
             }
@@ -110,7 +141,11 @@ impl fmt::Display for IrInstruction {
 
 impl fmt::Display for CompiledFunction<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "fn {} - #reg: {} {{", self.name, self.num_used_registers)?;
+        writeln!(
+            f,
+            "fn {} - #args: {}, #reg: {} {{",
+            self.name, self.num_args, self.num_used_registers
+        )?;
         for (i, instr) in self.body.iter().enumerate() {
             writeln!(f, "  {:-3}:  {}", i, instr)?;
         }
@@ -126,6 +161,13 @@ pub mod builders {
         IrInstruction::Mvi {
             dest: IrRegister::from_u32(dest),
             val,
+        }
+    }
+
+    pub fn mvarg(dest: u32, arg: usize) -> IrInstruction {
+        IrInstruction::MvArg {
+            dest: IrRegister::from_u32(dest),
+            arg: ArgumentIndex::from(arg),
         }
     }
 
