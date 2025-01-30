@@ -1,7 +1,9 @@
-- [ ] proper errors
+- [x] proper errors
 - [ ] symbol table
   - [x] test nested blocks
   - [ ] store functions
   - [x] add tests of undeclared identifier or double declaration
 - [ ] spans
-- [ ] expressions and not statements
+- [ ] function call
+  - [ ] check number of arguments
+  - [x] forward arguments to trampoline

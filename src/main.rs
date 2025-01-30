@@ -17,18 +17,18 @@ mod program_counter;
 fn main() {
     let source = r"
         fn main() {
-            return 1 + f();
+            return 1000 + f(3, 2, 1);
         }
 
-        fn f() {
-            return g() + 1;
+        fn f(x, y, z) {
+            return x * 100 + y * 10 + (g(z) + z) * 2;
         }
 
-        fn g() {
-            return 1;
+        fn g(z) {
+            return z + 1;
         }
     ";
     let jit_program = jit_compile_program(source, "main").expect("program should compile");
-    let res = (jit_program.main_function)() as f64;
-    println!("main function result: {}", res);
+    let fun = jit_program.main_function;
+    println!("main function result: {}", fun());
 }

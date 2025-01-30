@@ -164,16 +164,26 @@ pub fn jit_compile_program(source: &str, main_function_name: &str) -> Result<Jit
 pub fn jit_call_trampoline(
     function_catalog_ptr: *const CompiledFunctionCatalog,
     function_index: usize,
+    a0: i64,
+    a1: i64,
+    a2: i64,
+    a3: i64,
+    a4: i64,
+    a5: i64,
+    a6: i64,
 ) -> i64 {
     println!(
-        "inside trampoline, with args {:?} {}",
-        function_catalog_ptr, function_index
+        "inside trampoline, with args {:?} {} - {} {} {} {} {} {} {}",
+        function_catalog_ptr, function_index, a0, a1, a2, a3, a4, a5, a6,
     );
     let function_catalog = unsafe { &*function_catalog_ptr };
     let fun = function_catalog.get_function_pointer(FunctionId(function_index));
     println!("  function pointer found: {:?}", fun);
 
-    let result = fun();
+    // TODO: do a proper cast in the catalog?
+    let fun: fn(i64, i64, i64, i64, i64, i64, i64) -> i64 = unsafe { std::mem::transmute(fun) };
+    let result = fun(a0, a1, a2, a3, a4, a5, a6);
+
     println!("  callee function result: {}", result);
     result
 }

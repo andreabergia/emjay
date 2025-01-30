@@ -6,11 +6,11 @@ use std::{
 use crate::{
     backend::{BackendError, CompiledFunctionCatalog, GeneratedMachineCode, MachineCodeGenerator},
     backend_register_allocator::{self, AllocatedLocation},
-    ir::{CompiledFunction, IrInstruction, IrRegister},
+    ir::{ArgumentIndex, CompiledFunction, IrInstruction, IrRegister},
     jit::jit_call_trampoline,
 };
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 enum Register {
     X0,
     X1,
@@ -463,6 +463,7 @@ pub struct Aarch64Generator {
     stack_offset: u32,
     max_stack_offset: u32,
     used_registers: Vec<Register>,
+    used_args_registers: Vec<Register>,
 }
 
 impl MachineCodeGenerator for Aarch64Generator {
@@ -472,6 +473,7 @@ impl MachineCodeGenerator for Aarch64Generator {
         function_catalog: &CompiledFunctionCatalog,
     ) -> Result<GeneratedMachineCode, BackendError> {
         self.allocate_registers(function);
+        self.compute_used_args_registers(function);
 
         let mut instructions = Vec::new();
         let mut ldp_to_fix = Vec::new();
@@ -505,7 +507,31 @@ impl MachineCodeGenerator for Aarch64Generator {
                     }
                 }
 
-                IrInstruction::MvArg { dest, arg } => todo!(),
+                IrInstruction::MvArg { dest, arg } => {
+                    let dest: usize = (*dest).into();
+                    match self.locations[dest] {
+                        AllocatedLocation::Register { register } => {
+                            match Self::get_argument_location(*arg) {
+                                AllocatedLocation::Register { register: source } => {
+                                    instructions.push(Aarch64Instruction::MovRegToReg {
+                                        source,
+                                        destination: register,
+                                    });
+                                }
+                                AllocatedLocation::Stack { offset: _ } => {
+                                    return Err(BackendError::NotImplemented(
+                                        "move argument from stack".to_string(),
+                                    ))
+                                }
+                            }
+                        }
+                        AllocatedLocation::Stack { offset: _ } => {
+                            return Err(BackendError::NotImplemented(
+                                "move argument to stack".to_string(),
+                            ))
+                        }
+                    }
+                }
 
                 IrInstruction::Ret { reg } => {
                     let dest: usize = (*reg).into();
@@ -587,7 +613,11 @@ impl MachineCodeGenerator for Aarch64Generator {
                     )?;
                 }
 
-                IrInstruction::Call { dest, name, args } => {
+                IrInstruction::Call {
+                    dest,
+                    name,
+                    args: call_args,
+                } => {
                     let dest: usize = (*dest).into();
 
                     let called_function_index = function_catalog
@@ -597,7 +627,9 @@ impl MachineCodeGenerator for Aarch64Generator {
                     let fn_catalog_addr: usize =
                         function_catalog as *const CompiledFunctionCatalog as usize;
                     let jit_call_trampoline_address: usize =
-                        (jit_call_trampoline as fn(_, _) -> _) as usize;
+                        (jit_call_trampoline as fn(_, _, _, _, _, _, _, _, _) -> _) as usize;
+
+                    self.push(&mut instructions, Register::X0);
 
                     // We will put the jump address in X19
                     self.push(&mut instructions, Register::X19);
@@ -609,8 +641,14 @@ impl MachineCodeGenerator for Aarch64Generator {
                     for used_register in used_registers.iter().cloned() {
                         self.push(&mut instructions, used_register);
                     }
+                    let used_args_registers = self.used_args_registers.clone();
+                    for used_arg_register in used_args_registers.iter().cloned() {
+                        if used_arg_register != Register::X0 {
+                            self.push(&mut instructions, used_arg_register);
+                        }
+                    }
 
-                    // jit_call_trampoline(function_catalog_ptr, called_function_index)
+                    // jit_call_trampoline(function_catalog_ptr, called_function_index, args)
                     instructions.push(Aarch64Instruction::MovImmToReg {
                         register: Register::X0,
                         value: fn_catalog_addr as f64,
@@ -619,6 +657,34 @@ impl MachineCodeGenerator for Aarch64Generator {
                         register: Register::X1,
                         value: called_function_index.0 as f64,
                     });
+
+                    // Fill arguments
+                    for (call_arg, actual_arg) in call_args.iter().enumerate() {
+                        let shifted_call_arg = call_arg + 2; // X0 and X1 are already used
+                        let actual_arg: usize = (*actual_arg).into();
+                        match self.locations[actual_arg] {
+                            AllocatedLocation::Register {
+                                register: actual_arg_register,
+                            } => match Self::get_argument_location((shifted_call_arg).into()) {
+                                AllocatedLocation::Register {
+                                    register: call_convention_arg_register,
+                                } => {
+                                    instructions.push(Aarch64Instruction::MovRegToReg {
+                                        source: actual_arg_register,
+                                        destination: call_convention_arg_register,
+                                    });
+                                }
+                                AllocatedLocation::Stack { .. } => {
+                                    todo!("more than 8 arguments")
+                                }
+                            },
+                            AllocatedLocation::Stack { offset: _ } => {
+                                return Err(BackendError::NotImplemented(
+                                    "passing arguments to function from stack".to_string(),
+                                ))
+                            }
+                        }
+                    }
                     instructions.push(Aarch64Instruction::MovImmToReg {
                         register: Register::X19,
                         value: jit_call_trampoline_address as f64,
@@ -628,12 +694,17 @@ impl MachineCodeGenerator for Aarch64Generator {
                     });
 
                     // Restore registers
+                    for used_arg_register in used_args_registers.iter().cloned() {
+                        if used_arg_register != Register::X0 {
+                            self.pop(&mut instructions, used_arg_register);
+                        }
+                    }
                     for used_register in used_registers.iter().rev().cloned() {
                         self.pop(&mut instructions, used_register);
                     }
                     self.pop(&mut instructions, Register::X19);
 
-                    // Copy result (x1) to the opportune register
+                    // Copy result (x0) to the opportune register
                     match self.locations[dest] {
                         AllocatedLocation::Register {
                             register: destination,
@@ -647,6 +718,8 @@ impl MachineCodeGenerator for Aarch64Generator {
                             ))
                         }
                     }
+
+                    self.pop(&mut instructions, Register::X0);
                 }
             }
         }
@@ -695,14 +768,29 @@ impl Aarch64Generator {
                 // TODO: add X19-X28 and save them before modifying
             ],
         );
-        self.locations.extend(allocations);
+        self.locations = allocations;
 
         for location in self.locations.iter() {
             if let AllocatedLocation::Register { register } = location {
-                // This looks quadratic, but actually we only have 7 registers
-                // so it's 7 * N i.e. linear
+                // This looks quadratic, but actually we only have 7 registers.
+                // Therefore this is actually 7 * N i.e. linear. Probably faster
+                // than a hash set.
                 if !self.used_registers.contains(register) {
                     self.used_registers.push(*register);
+                }
+            }
+        }
+    }
+
+    fn compute_used_args_registers(&mut self, function: &CompiledFunction) {
+        for arg in 0..function.num_args {
+            let location = Self::get_argument_location(arg.into());
+            match location {
+                AllocatedLocation::Register { register } => {
+                    self.used_args_registers.push(register);
+                }
+                AllocatedLocation::Stack { offset: _ } => {
+                    todo!("support for more than 8 arguments");
                 }
             }
         }
@@ -758,6 +846,37 @@ impl Aarch64Generator {
             offset: self.stack_offset,
         });
         self.stack_offset -= 8;
+    }
+
+    fn get_argument_location(arg: ArgumentIndex) -> AllocatedLocation<Register> {
+        let arg: usize = arg.into();
+        match arg {
+            0 => AllocatedLocation::Register {
+                register: Register::X0,
+            },
+            1 => AllocatedLocation::Register {
+                register: Register::X1,
+            },
+            2 => AllocatedLocation::Register {
+                register: Register::X2,
+            },
+            3 => AllocatedLocation::Register {
+                register: Register::X3,
+            },
+            4 => AllocatedLocation::Register {
+                register: Register::X4,
+            },
+            5 => AllocatedLocation::Register {
+                register: Register::X5,
+            },
+            6 => AllocatedLocation::Register {
+                register: Register::X6,
+            },
+            7 => AllocatedLocation::Register {
+                register: Register::X7,
+            },
+            _ => todo!("Support for more than 8 arguments"),
+        }
     }
 }
 
@@ -1130,7 +1249,8 @@ mod test {
         let function_catalog = Box::new(CompiledFunctionCatalog::new(&compiled));
         let fn_catalog_addr: usize =
             function_catalog.as_ref() as *const CompiledFunctionCatalog as usize;
-        let jit_call_trampoline_address: usize = (jit_call_trampoline as fn(_, _) -> _) as usize;
+        let jit_call_trampoline_address: usize =
+            (jit_call_trampoline as fn(_, _, _, _, _, _, _, _, _) -> _) as usize;
 
         let mut gen = Aarch64Generator::default();
         let machine_code = gen

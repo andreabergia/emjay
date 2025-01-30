@@ -6,7 +6,7 @@ use crate::{
     program_counter::ProgramCounter,
 };
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AllocatedLocation<HardwareRegister> {
     Register { register: HardwareRegister },
     Stack { offset: usize },
@@ -138,10 +138,10 @@ fn map_to_hw_register<HardwareRegister>(
     hw_registers: Vec<HardwareRegister>,
 ) -> Vec<AllocatedLocation<HardwareRegister>>
 where
-    HardwareRegister: Clone,
+    HardwareRegister: Clone + fmt::Debug,
 {
     let num_hw_regs = hw_registers.len();
-    ir_reg_allocation
+    let res: Vec<_> = ir_reg_allocation
         .iter()
         .map(|logical_hw_reg| {
             assert!(*logical_hw_reg != NOT_ALLOCATED);
@@ -156,7 +156,14 @@ where
                 }
             }
         })
-        .collect()
+        .collect();
+
+    println!("  hw allocations: ");
+    for (i, loc) in res.iter().enumerate() {
+        println!("    r{}: {:?}", i, loc);
+    }
+
+    res
 }
 
 pub fn allocate<HardwareRegister>(
@@ -164,7 +171,7 @@ pub fn allocate<HardwareRegister>(
     hw_registers: Vec<HardwareRegister>,
 ) -> Vec<AllocatedLocation<HardwareRegister>>
 where
-    HardwareRegister: Clone,
+    HardwareRegister: Clone + fmt::Debug,
 {
     println!("allocating registers!");
     let ir_reg_used_at = compute_ir_reg_used_at(function);
