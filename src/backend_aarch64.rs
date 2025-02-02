@@ -1262,25 +1262,27 @@ mod test {
         assert_eq!(
             format!(
                 "
-            |stp  x29, x30, [sp, #-48]!
+            |stp  x29, x30, [sp, #-64]!
             |mov  x29, sp
             |movz x9, 1
-            |str  x19, [x29, #24]
-            |str  x9, [x29, #32]
-            |str  x10, [x29, #40]
-            |str  x11, [x29, #48]
+            |str  x0, [x29, #24]
+            |str  x19, [x29, #32]
+            |str  x9, [x29, #40]
+            |str  x10, [x29, #48]
+            |str  x11, [x29, #56]
             |movz x0, {}
             |movz x1, 1
             |movz x19, {}
             |blr x19
-            |ldr  x11, [x29, #48]
-            |ldr  x10, [x29, #40]
-            |ldr  x9, [x29, #32]
-            |ldr  x19, [x29, #24]
+            |ldr  x11, [x29, #56]
+            |ldr  x10, [x29, #48]
+            |ldr  x9, [x29, #40]
+            |ldr  x19, [x29, #32]
             |mov  x10, x0
+            |ldr  x0, [x29, #24]
             |add  x11, x9, x10
             |mov  x0, x11
-            |ldp  x29, x30, [sp], #48
+            |ldp  x29, x30, [sp], #64
             |ret
             |",
                 fn_catalog_addr, jit_call_trampoline_address
