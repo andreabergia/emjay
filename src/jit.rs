@@ -162,6 +162,7 @@ pub fn jit_compile_program(source: &str, main_function_name: &str) -> Result<Jit
 /// the actual address to which the callee has been mapped and will then invoke it.
 /// As usual, most problems in computer science can be solved with an additional level of
 /// indirection :-)
+#[allow(clippy::too_many_arguments)]
 pub fn jit_call_trampoline(
     function_catalog_ptr: *const CompiledFunctionCatalog,
     function_index: usize,

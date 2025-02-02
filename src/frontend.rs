@@ -8,6 +8,7 @@ use crate::{
 };
 
 #[derive(Debug, Error)]
+#[allow(clippy::enum_variant_names)]
 pub enum FrontendError {
     #[error("variable \"{name}\" not defined")]
     VariableNotDefined {
