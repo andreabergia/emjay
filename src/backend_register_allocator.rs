@@ -1,6 +1,8 @@
 use core::fmt;
 use std::collections::VecDeque;
 
+use tracing::debug;
+
 use crate::{
     ir::{CompiledFunction, IrRegister},
     program_counter::ProgramCounter,
@@ -24,11 +26,10 @@ fn compute_ir_reg_used_at(function: &CompiledFunction) -> Vec<VecDeque<ProgramCo
     }
 
     // Debug
-    println!("  computed usage:");
+    debug!("  computed usage:");
     for (ir_reg, used_at) in ir_reg_used_at.iter().enumerate() {
-        println!("    reg {} used at {:?}", ir_reg, used_at);
+        debug!("    reg {} used at {:?}", ir_reg, used_at);
     }
-    println!();
 
     ir_reg_used_at
 }
@@ -60,26 +61,31 @@ fn allocate_ir_regs_to_logical_hw_regs(
 
     for (pc, instruction) in function.body.iter().enumerate() {
         let pc = ProgramCounter(pc);
-        println!("  pc {:2}:  {}", pc.0, instruction);
+        debug!("  pc {:2}:  {}", pc.0, instruction);
         for ir_reg in instruction.operands() {
-            print!("    register {} ", ir_reg);
-
             if ir_reg_allocation[usize::from(ir_reg)] != NOT_ALLOCATED {
                 // Already allocated
-                println!(
-                    "already allocated to hw reg {}",
+                debug!(
+                    "    register {} already allocated to hw reg {}",
+                    ir_reg,
                     ir_reg_allocation[usize::from(ir_reg)]
                 );
             } else if free_logical_hw_registers.is_empty() {
                 // Requires a new logical hw register
                 let new_logical_hw_reg = LogicalHwRegister(logical_hw_regs_content.len());
-                println!("allocating to new hw reg {:?}", new_logical_hw_reg);
+                debug!(
+                    "    register {} allocating to new hw reg {:?}",
+                    ir_reg, new_logical_hw_reg
+                );
                 ir_reg_allocation[usize::from(ir_reg)] = new_logical_hw_reg;
                 logical_hw_regs_content.push(ir_reg);
             } else {
                 // We can reuse something free
                 let first_free_reg = free_logical_hw_registers.pop().unwrap();
-                println!("allocating to existing but free hw reg {}", first_free_reg);
+                debug!(
+                    "    register {} allocating to existing but free hw reg {}",
+                    ir_reg, first_free_reg
+                );
                 ir_reg_allocation[usize::from(ir_reg)] = first_free_reg;
                 logical_hw_regs_content[first_free_reg.0] = ir_reg;
             }
@@ -94,7 +100,7 @@ fn allocate_ir_regs_to_logical_hw_regs(
                 }
 
                 if ir_reg_used_at_pcs.is_empty() {
-                    println!(
+                    debug!(
                         "    freeing register {:?} which was assigned to {} because it was its last usage",
                             hw_reg, *ir_reg
                         );
@@ -104,7 +110,7 @@ fn allocate_ir_regs_to_logical_hw_regs(
             }
         }
 
-        println!(
+        debug!(
             "    ir_reg_allocation: [{}]",
             ir_reg_allocation
                 .iter()
@@ -116,7 +122,7 @@ fn allocate_ir_regs_to_logical_hw_regs(
                 .collect::<Vec<_>>()
                 .join(", ")
         );
-        println!(
+        debug!(
             "    logical_hw_regs: [{}]",
             logical_hw_regs_content
                 .iter()
@@ -158,9 +164,9 @@ where
         })
         .collect();
 
-    println!("  hw allocations: ");
+    debug!("  hw allocations: ");
     for (i, loc) in res.iter().enumerate() {
-        println!("    r{}: {:?}", i, loc);
+        debug!("    r{}: {:?}", i, loc);
     }
 
     res
@@ -173,7 +179,7 @@ pub fn allocate<HardwareRegister>(
 where
     HardwareRegister: Clone + fmt::Debug,
 {
-    println!("allocating registers!");
+    debug!("allocating registers");
     let ir_reg_used_at = compute_ir_reg_used_at(function);
     let ir_reg_allocation = allocate_ir_regs_to_logical_hw_regs(function, ir_reg_used_at);
     map_to_hw_register(ir_reg_allocation, hw_registers)

@@ -149,7 +149,6 @@ impl<'input> FunctionCompiler {
         parent_symbol_table: SymbolTableRef<'input>,
     ) -> Result<(), FrontendError> {
         let symbol_table = SymbolTable::with_parent(parent_symbol_table);
-        println!("compiling block: {:?}", block);
         for element in block.iter() {
             match element {
                 BlockElement::NestedBlock(nested) => {
@@ -332,7 +331,6 @@ mod test {
         assert_eq!(compiled.len(), 1);
 
         let f = &compiled[0];
-        println!("f: {}", f);
         assert_eq!(f.name, "the_answer");
         assert_eq!(f.num_used_registers, 11);
         assert_eq!(

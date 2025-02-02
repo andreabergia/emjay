@@ -109,9 +109,7 @@ impl X64Instruction {
             X64Instruction::Pop { register } => vec![0x58 + register.index()],
             X64Instruction::MovImmToReg { register, value } => {
                 let mut vec = vec![0x48, 0xB8 + register.index()];
-                println!("vec : {:?}", vec);
                 vec.extend_from_slice(&(*value as i64).to_le_bytes());
-                println!("vec : {:?}", vec);
                 vec
             }
             X64Instruction::MovRegToReg {

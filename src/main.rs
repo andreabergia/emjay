@@ -1,6 +1,8 @@
 #![allow(dead_code)]
 
 use jit::jit_compile_program;
+use tracing::{info, Level};
+use tracing_subscriber::FmtSubscriber;
 
 mod ast;
 mod backend;
@@ -15,6 +17,12 @@ mod parser;
 mod program_counter;
 
 fn main() {
+    let subscriber = FmtSubscriber::builder()
+        .with_max_level(Level::TRACE)
+        .finish();
+    tracing::subscriber::set_global_default(subscriber)
+        .expect("setting default logging subscriber failed");
+
     let source = r"
         fn main() {
             return 1000 + f(3, 2, 1);
@@ -29,6 +37,7 @@ fn main() {
         }
     ";
     let jit_program = jit_compile_program(source, "main").expect("program should compile");
+    info!("program compiled, running it!");
     let fun = jit_program.main_function;
-    println!("main function result: {}", fun());
+    info!("main function result: {}", fun());
 }

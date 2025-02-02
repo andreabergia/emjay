@@ -1,6 +1,7 @@
 #[allow(unused)]
 use rustix::mm::{mmap_anonymous, mprotect, MapFlags, MprotectFlags, ProtFlags};
 use thiserror::Error;
+use tracing::{debug, info, span, Level};
 
 #[allow(unused)]
 use crate::backend_aarch64::Aarch64Generator;
@@ -42,7 +43,7 @@ unsafe fn to_function_pointer(bytes: &[u8]) -> Result<fn() -> i64, MmapError> {
             MapFlags::PRIVATE,
         )?;
 
-        println!("mmapped address: {:?}", map);
+        debug!("mmapped address: {:?}", map);
         std::ptr::copy_nonoverlapping(bytes.as_ptr(), map as *mut u8, size);
 
         let f: fn() -> i64 = std::mem::transmute(map);
@@ -59,11 +60,11 @@ unsafe fn to_function_pointer(bytes: &[u8]) -> Result<fn() -> i64, MmapError> {
             MapFlags::PRIVATE,
         )?;
 
-        println!("mmapped address: {:?}", map);
+        debug!("mmapped address: {:?}", map);
         std::ptr::copy_nonoverlapping(bytes.as_ptr(), map as *mut u8, size);
 
         mprotect(map, size, MprotectFlags::EXEC)?;
-        println!("mprotected: {:?}", map);
+        debug!("mprotected: {:?}", map);
 
         let f: fn() -> i64 = std::mem::transmute(map);
         Ok(f)
@@ -91,9 +92,7 @@ pub struct JitProgram {
 }
 
 pub fn jit_compile_program(source: &str, main_function_name: &str) -> Result<JitProgram, JitError> {
-    println!("source:");
-    println!("{}", source);
-    println!();
+    info!("source: \n{}", source);
 
     let program = parser::parse_program(source)?;
     let compiled_functions = frontend::compile(program)?;
@@ -107,28 +106,30 @@ pub fn jit_compile_program(source: &str, main_function_name: &str) -> Result<Jit
     // address and not be de-allocated
     let mut function_catalog = Box::new(CompiledFunctionCatalog::new(&compiled_functions));
     let function_catalog_ptr: *const CompiledFunctionCatalog = &*function_catalog;
-    println!("function catalog: {:0X}", function_catalog_ptr as usize);
+    debug!("function catalog: {:0X}", function_catalog_ptr as usize);
 
     let mut main_function = None;
     for function in compiled_functions.iter() {
-        println!("compiling function: {}", function.name);
-        println!("ir:");
-        println!("{}", function);
-        println!();
+        let _span = span!(Level::DEBUG, "jit function", name = function.name);
+        debug!("compiling function: {}", function.name);
+        debug!("ir:\n{}", function);
 
         let machine_code = gen.generate_machine_code(function, &function_catalog)?;
-        println!("asm:");
-        println!("{}", machine_code.asm);
+        debug!("asm:\n{}", machine_code.asm);
 
-        println!("Machine code:");
-        for (index, byte) in machine_code.machine_code.iter().enumerate() {
-            print!("{:02X} ", byte);
-            if index % 4 == 3 {
-                println!();
-            }
-        }
-        println!();
-        println!();
+        let machine_code_for_debug: String = machine_code
+            .machine_code
+            .iter()
+            .enumerate()
+            .map(|(index, byte)| {
+                if index % 4 == 3 {
+                    format!("{:02X}\n", byte)
+                } else {
+                    format!("{:02X} ", byte)
+                }
+            })
+            .collect();
+        debug!("Machine code:\n{}", machine_code_for_debug);
 
         let fun_ptr = unsafe { to_function_pointer(&machine_code.machine_code)? };
         function_catalog.store_function_pointer(
@@ -172,19 +173,19 @@ pub fn jit_call_trampoline(
     a5: i64,
     a6: i64,
 ) -> i64 {
-    println!(
+    debug!(
         "inside trampoline, with args {:?} {} - {} {} {} {} {} {} {}",
         function_catalog_ptr, function_index, a0, a1, a2, a3, a4, a5, a6,
     );
     let function_catalog = unsafe { &*function_catalog_ptr };
     let fun = function_catalog.get_function_pointer(FunctionId(function_index));
-    println!("  function pointer found: {:?}", fun);
+    debug!("  function pointer found: {:?}", fun);
 
     // TODO: do a proper cast in the catalog?
     let fun: fn(i64, i64, i64, i64, i64, i64, i64) -> i64 = unsafe { std::mem::transmute(fun) };
     let result = fun(a0, a1, a2, a3, a4, a5, a6);
 
-    println!("  callee function result: {}", result);
+    debug!("  callee function result: {}", result);
     result
 }
 
