@@ -9,7 +9,7 @@ use crate::backend_aarch64::Aarch64Generator;
 use crate::backend_x64_linux::X64LinuxGenerator;
 
 use crate::{
-    backend::{BackendError, CompiledFunctionCatalog, FunctionId, MachineCodeGenerator},
+    backend::{BackendError, CompiledFunctionCatalog, FunctionId, JitFn, MachineCodeGenerator},
     frontend::{self, FrontendError},
     parser,
 };
@@ -32,7 +32,7 @@ impl From<rustix::io::Errno> for MmapError {
 
 // Converts the given slice bytes, containing machine code, into a function pointer. It does so by
 // mmapping a new page, copying the bytes, and then performing a cast.
-unsafe fn to_function_pointer(bytes: &[u8]) -> Result<fn() -> i64, MmapError> {
+unsafe fn to_function_pointer(bytes: &[u8]) -> Result<JitFn, MmapError> {
     #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
     {
         let size = bytes.len();
@@ -66,7 +66,7 @@ unsafe fn to_function_pointer(bytes: &[u8]) -> Result<fn() -> i64, MmapError> {
         mprotect(map, size, MprotectFlags::EXEC)?;
         debug!("mprotected: {:?}", map);
 
-        let f: fn() -> i64 = std::mem::transmute(map);
+        let f: JitFn = std::mem::transmute(map);
         Ok(f)
     }
 }
@@ -88,7 +88,7 @@ pub enum JitError {
 #[derive(Debug)]
 pub struct JitProgram {
     pub function_catalog: Box<CompiledFunctionCatalog>,
-    pub main_function: fn() -> i64,
+    pub main_function: JitFn,
 }
 
 pub fn jit_compile_program(source: &str, main_function_name: &str) -> Result<JitProgram, JitError> {
@@ -198,19 +198,19 @@ mod tests {
     fn can_generate_valid_basic_function() {
         let source = "fn test() { let a = 2; return a + 1; }";
         let program = super::jit_compile_program(source, "test").expect("function should compile");
-        let res = (program.main_function)() as f64; // Call it!
-        assert_eq!(res, 3.0);
+        let res = (program.main_function)(0, 0, 0, 0, 0, 0); // Call it!
+        assert_eq!(res, 3);
     }
 
     #[test]
     fn can_generate_function_calls() {
         let source = "
-        fn f() { return g() + 1; }
+        fn f(x) { return g() + x; }
         fn g() { return 1; }
         ";
         let program = super::jit_compile_program(source, "f").expect("function should compile");
-        let res = (program.main_function)() as f64; // Call it!
-        assert_eq!(res, 2.0);
+        let res = (program.main_function)(4, 0, 0, 0, 0, 0); // Call it!
+        assert_eq!(res, 5);
     }
 
     #[test]

@@ -28,6 +28,8 @@ pub enum BackendError {
     FunctionNotFound(String),
 }
 
+pub type JitFn = fn(i64, i64, i64, i64, i64, i64) -> i64;
+
 /// Stores two maps:
 /// - function name -> a progressive ID
 /// - progressive ID -> address (after it has been mmap-ed)
@@ -36,7 +38,7 @@ pub struct CompiledFunctionCatalog {
     functions_by_name: HashMap<String, FunctionId>,
 
     // Indexed by FunctionId, which are dense
-    addresses: Vec<fn() -> i64>,
+    addresses: Vec<JitFn>,
 }
 
 impl CompiledFunctionCatalog {
@@ -58,12 +60,12 @@ impl CompiledFunctionCatalog {
 
     /// Stores a function pointer. Requirement: it must be called in order of `id`
     /// and;for each function in the program
-    pub fn store_function_pointer(&mut self, id: FunctionId, fun_ptr: fn() -> i64) {
+    pub fn store_function_pointer(&mut self, id: FunctionId, fun_ptr: JitFn) {
         assert!(id.0 == self.addresses.len());
         self.addresses.insert(id.0, fun_ptr);
     }
 
-    pub fn get_function_pointer(&self, id: FunctionId) -> fn() -> i64 {
+    pub fn get_function_pointer(&self, id: FunctionId) -> JitFn {
         assert!(id.0 < self.addresses.len());
         self.addresses[id.0]
     }

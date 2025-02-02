@@ -36,8 +36,9 @@ fn main() {
             return z + 1;
         }
     ";
+
     let jit_program = jit_compile_program(source, "main").expect("program should compile");
     info!("program compiled, running it!");
     let fun = jit_program.main_function;
-    info!("main function result: {}", fun());
+    info!("main function result: {}", fun(0, 0, 0, 0, 0, 0));
 }
