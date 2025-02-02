@@ -129,7 +129,7 @@ enum Aarch64Instruction {
     Ret,
     MovImmToReg {
         register: Register,
-        value: f64,
+        value: i64,
     },
     MovRegToReg {
         source: Register,
@@ -651,11 +651,11 @@ impl MachineCodeGenerator for Aarch64Generator {
                     // jit_call_trampoline(function_catalog_ptr, called_function_index, args)
                     instructions.push(Aarch64Instruction::MovImmToReg {
                         register: Register::X0,
-                        value: fn_catalog_addr as f64,
+                        value: fn_catalog_addr as i64,
                     });
                     instructions.push(Aarch64Instruction::MovImmToReg {
                         register: Register::X1,
-                        value: called_function_index.0 as f64,
+                        value: called_function_index.0 as i64,
                     });
 
                     // Fill arguments
@@ -687,7 +687,7 @@ impl MachineCodeGenerator for Aarch64Generator {
                     }
                     instructions.push(Aarch64Instruction::MovImmToReg {
                         register: Register::X19,
-                        value: jit_call_trampoline_address as f64,
+                        value: jit_call_trampoline_address as i64,
                     });
                     instructions.push(Aarch64Instruction::Blr {
                         register: Register::X19,
@@ -897,7 +897,7 @@ mod test {
         assert_encodes_as(
             Aarch64Instruction::MovImmToReg {
                 register: Register::X1,
-                value: 123.,
+                value: 123,
             },
             vec![0x61, 0x0F, 0x80, 0xD2],
         );
@@ -908,7 +908,7 @@ mod test {
         assert_encodes_as(
             Aarch64Instruction::MovImmToReg {
                 register: Register::X1,
-                value: 1234567.,
+                value: 1234567,
             },
             vec![0xE1, 0xD0, 0x9A, 0xD2, 0x41, 0x02, 0xA0, 0xF2],
         );
@@ -919,7 +919,7 @@ mod test {
         assert_encodes_as(
             Aarch64Instruction::MovImmToReg {
                 register: Register::X1,
-                value: 12345678901.,
+                value: 12345678901,
             },
             vec![
                 0xA1, 0x86, 0x83, 0xD2, 0x81, 0xFB, 0xBB, 0xF2, 0x41, 0x00, 0xC0, 0xF2,
@@ -932,7 +932,7 @@ mod test {
         assert_encodes_as(
             Aarch64Instruction::MovImmToReg {
                 register: Register::X1,
-                value: 1234567890123456.,
+                value: 1234567890123456,
             },
             vec![
                 0x01, 0x58, 0x97, 0xd2, 0x41, 0x91, 0xA7, 0xF2, 0xA1, 0x5A, 0xCC, 0xF2, 0x81, 0x00,
@@ -1296,28 +1296,28 @@ mod test {
     proptest! {
         #[test]
         fn mov_immediate_uses_one_instruction_for_16bit_values(n in 0..0xFFFF) {
-            let instruction = Aarch64Instruction::MovImmToReg { register: Register::X0, value: n as f64 };
+            let instruction = Aarch64Instruction::MovImmToReg { register: Register::X0, value: n as i64 };
             let machine_code = instruction.make_machine_code();
             assert_eq!(4, machine_code.len());
         }
 
         #[test]
         fn mov_immediate_uses_two_instructions_for_32bit_values(n in 0x10000..0xFFFFFFFFu32) {
-            let instruction = Aarch64Instruction::MovImmToReg { register: Register::X0, value: n as f64 };
+            let instruction = Aarch64Instruction::MovImmToReg { register: Register::X0, value: n as i64 };
             let machine_code = instruction.make_machine_code();
             assert_eq!(8, machine_code.len());
         }
 
         #[test]
         fn mov_immediate_uses_three_instructions_for_48bit_values(n in 0x100000000..0xFFFFFFFFFFFFu64) {
-            let instruction = Aarch64Instruction::MovImmToReg { register: Register::X0, value: n as f64 };
+            let instruction = Aarch64Instruction::MovImmToReg { register: Register::X0, value: n as i64 };
             let machine_code = instruction.make_machine_code();
             assert_eq!(12, machine_code.len());
         }
 
         #[test]
         fn mov_immediate_uses_four_instructions_for_64bit_values(n in 0x1000000000000..0xFFFFFFFFFFFFFFFFu64) {
-            let instruction = Aarch64Instruction::MovImmToReg { register: Register::X0, value: n as f64 };
+            let instruction = Aarch64Instruction::MovImmToReg { register: Register::X0, value: n as i64 };
             let machine_code = instruction.make_machine_code();
             assert_eq!(16, machine_code.len());
         }

@@ -201,7 +201,7 @@ mod tests {
             &CompiledFunction {
                 name: "test",
                 num_args: 0,
-                body: vec![mvi(0, 0.0), mvi(1, 1.0), add(2, 0, 1)],
+                body: vec![mvi(0, 0), mvi(1, 1), add(2, 0, 1)],
                 num_used_registers: 3,
             },
             vec!["h0"],
@@ -224,7 +224,7 @@ mod tests {
                 name: "test",
                 num_args: 0,
                 // Register h2 is unused after instruction #2, so we can reuse it for #3
-                body: vec![mvi(0, 0.0), mvi(1, 1.0), mvi(2, 2.0), add(3, 0, 1)],
+                body: vec![mvi(0, 0), mvi(1, 1), mvi(2, 2), add(3, 0, 1)],
                 num_used_registers: 4,
             },
             vec!["h0", "h1", "h2"],

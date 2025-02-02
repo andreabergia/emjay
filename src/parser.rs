@@ -141,23 +141,23 @@ mod tests {
                         expression: Expression::Add(
                             Box::new(Expression::Negate(Box::new(Expression::Identifier("y")))),
                             Box::new(Expression::Mul(
-                                Box::new(Expression::Number(3f64)),
+                                Box::new(Expression::Number(3)),
                                 Box::new(Expression::Sub(
                                     Box::new(Expression::FunctionCall(FunctionCall {
                                         name: "z",
                                         args: vec![
-                                            Expression::Number(2f64),
+                                            Expression::Number(2),
                                             Expression::Identifier("w")
                                         ]
                                     })),
-                                    Box::new(Expression::Number(1f64))
+                                    Box::new(Expression::Number(1))
                                 ))
                             ))
                         )
                     },
                     BlockElement::NestedBlock(vec![BlockElement::LetStatement {
                         name: "z",
-                        expression: Expression::Number(42f64)
+                        expression: Expression::Number(42)
                     }]),
                     BlockElement::ReturnStatement(Expression::Identifier("x")),
                 ]

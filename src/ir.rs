@@ -56,7 +56,7 @@ impl fmt::Display for ArgumentIndex {
 pub enum IrInstruction {
     Mvi {
         dest: IrRegister,
-        val: f64,
+        val: i64,
     },
     MvArg {
         dest: IrRegister,
@@ -171,7 +171,7 @@ impl fmt::Display for CompiledFunction<'_> {
 pub mod builders {
     use super::*;
 
-    pub fn mvi(dest: u32, val: f64) -> IrInstruction {
+    pub fn mvi(dest: u32, val: i64) -> IrInstruction {
         IrInstruction::Mvi {
             dest: IrRegister::from_u32(dest),
             val,

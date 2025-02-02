@@ -28,12 +28,10 @@ expression = { prefix? ~ factor ~ (infix ~ prefix? ~ factor )* }
 
 functionCallArguments = { (expression ~ ("," ~ expression)*)? }
 
-number = @{"-"? ~ (hexNumber | decimalNumber)}
+number = @{"-"? ~ (hexNumber | integerNumber)}
 
-decimalNumber = @{
+integerNumber = @{
     ("0" | ASCII_NONZERO_DIGIT ~ ASCII_DIGIT*)
-    ~ ("." ~ ASCII_DIGIT*)?
-    ~ (^"e" ~ ("+" | "-")? ~ ASCII_DIGIT+)?
 }
 
 hexNumber = @{ "0" ~ "x" ~ ASCII_HEX_DIGIT+ }

@@ -337,13 +337,13 @@ mod test {
         assert_eq!(
             f.body,
             vec![
-                mvi(0, 3.0),
+                mvi(0, 3),
                 mvarg(1, 0),
-                mvi(2, 1.0),
+                mvi(2, 1),
                 add(3, 1, 2),
                 add(4, 0, 3),
-                mvi(5, 2.0),
-                mvi(6, 3.0),
+                mvi(5, 2),
+                mvi(6, 3),
                 mul(7, 5, 6),
                 call(8, "f", vec![0, 3]),
                 div(9, 7, 8),
@@ -371,7 +371,7 @@ mod test {
         let f = &compiled[0];
         assert_eq!(f.name, "the_answer");
         assert_eq!(f.num_used_registers, 2);
-        assert_eq!(f.body, vec![mvi(0, 1.0), mvi(1, 2.0), ret(1)]);
+        assert_eq!(f.body, vec![mvi(0, 1), mvi(1, 2), ret(1)]);
     }
 
     #[test]
@@ -391,7 +391,7 @@ mod test {
         let f = &compiled[0];
         assert_eq!(f.name, "the_answer");
         assert_eq!(f.num_used_registers, 1);
-        assert_eq!(f.body, vec![mvi(0, 1.0), ret(0)]);
+        assert_eq!(f.body, vec![mvi(0, 1), ret(0)]);
     }
 
     #[test]

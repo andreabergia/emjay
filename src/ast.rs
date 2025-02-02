@@ -32,7 +32,7 @@ pub struct FunctionCall<'input> {
 #[derive(Debug, PartialEq)]
 pub enum Expression<'input> {
     Identifier(&'input str),
-    Number(f64),
+    Number(i64),
     Negate(Box<Self>),
     Add(Box<Self>, Box<Self>),
     Sub(Box<Self>, Box<Self>),

@@ -60,7 +60,7 @@ enum X64Instruction {
     Retn,
     MovImmToReg {
         register: Register,
-        value: f64,
+        value: i64,
     },
     MovRegToReg {
         source: Register,
@@ -109,7 +109,7 @@ impl X64Instruction {
             X64Instruction::Pop { register } => vec![0x58 + register.index()],
             X64Instruction::MovImmToReg { register, value } => {
                 let mut vec = vec![0x48, 0xB8 + register.index()];
-                vec.extend_from_slice(&(*value as i64).to_le_bytes());
+                vec.extend_from_slice(&(*value).to_le_bytes());
                 vec
             }
             X64Instruction::MovRegToReg {
@@ -251,7 +251,7 @@ impl MachineCodeGenerator for X64LinuxGenerator {
                             });
                             instructions.push(X64Instruction::MovImmToReg {
                                 register: Register::Rdx,
-                                value: 0.0,
+                                value: 0,
                             });
                             instructions.push(X64Instruction::DivRegFromRax {
                                 register: Register::R11,
@@ -266,7 +266,7 @@ impl MachineCodeGenerator for X64LinuxGenerator {
                             });
                             instructions.push(X64Instruction::MovImmToReg {
                                 register: Register::Rdx,
-                                value: 0.0,
+                                value: 0,
                             });
                             instructions.push(X64Instruction::DivRegFromRax { register });
                             instructions.push(X64Instruction::Pop {

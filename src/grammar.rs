@@ -35,9 +35,6 @@ mod tests {
         assert_can_be_parsed_as("0", Rule::number);
         assert_can_be_parsed_as("1", Rule::number);
         assert_can_be_parsed_as("-123", Rule::number);
-        assert_can_be_parsed_as("0.123", Rule::number);
-        assert_can_be_parsed_as("1e6", Rule::number);
-        assert_can_be_parsed_as("1.2e7", Rule::number);
         assert_can_be_parsed_as("0x42A", Rule::number);
         assert_can_be_parsed_as("-0x42A", Rule::number);
     }

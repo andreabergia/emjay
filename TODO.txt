@@ -7,4 +7,4 @@
   - [ ] check number of arguments
   - [x] forward arguments to trampoline
   - [ ] move function not found and resolution to frontend
-- [ ] get rid of doubles
+- [x] get rid of doubles
