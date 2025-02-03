@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use thiserror::Error;
 
-use crate::ir::CompiledFunction;
+use crate::{frontend::FunctionId, ir::CompiledFunction};
 
 pub trait MachineCodeGenerator {
     fn generate_machine_code(
@@ -11,9 +11,6 @@ pub trait MachineCodeGenerator {
         function_catalog: &CompiledFunctionCatalog,
     ) -> Result<GeneratedMachineCode, BackendError>;
 }
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct FunctionId(pub usize);
 
 pub struct GeneratedMachineCode {
     pub asm: String,

@@ -7,6 +7,9 @@ use crate::{
     ir::{CompiledFunction, IrInstruction, IrRegister},
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct FunctionId(pub usize);
+
 #[derive(Debug, Error)]
 #[allow(clippy::enum_variant_names)]
 pub enum FrontendError {
@@ -16,15 +19,27 @@ pub enum FrontendError {
     VariableAlreadyDefined { name: String },
     #[error("variable \"{name}\" cannot shadow function argument with the same name")]
     VariableCannotShadowArgument { name: String },
+    #[error("unknown function \"{name}\" called")]
+    UnknownFunctionCalled { name: String },
 }
 
 pub fn compile(program: Program) -> Result<Vec<CompiledFunction>, FrontendError> {
+    let global_symbol_table = SymbolTable::new();
+
+    // Do one quick pass to store all functions by name
+    program.iter().enumerate().for_each(|(index, function)| {
+        global_symbol_table.borrow_mut().put(Symbol::Function {
+            id: FunctionId(index),
+            name: function.name,
+        });
+    });
+
+    // Then do a second pass to actually compile each function
     program
         .iter()
         .map(|f| {
-            let global_symbol_table = SymbolTable::new();
             let mut compiler = FunctionCompiler::default();
-            compiler.compile_function(f, global_symbol_table)
+            compiler.compile_function(f, global_symbol_table.clone())
         })
         .collect()
 }
@@ -32,6 +47,7 @@ pub fn compile(program: Program) -> Result<Vec<CompiledFunction>, FrontendError>
 #[derive(Clone)]
 enum Symbol<'input> {
     Function {
+        id: FunctionId,
         name: &'input str,
     },
     Variable {
@@ -47,7 +63,7 @@ enum Symbol<'input> {
 impl<'input> Symbol<'input> {
     fn name(&self) -> &'input str {
         match self {
-            Symbol::Function { name } => name,
+            Symbol::Function { name, .. } => name,
             Symbol::Variable { name, .. } => name,
             Symbol::Argument { name, .. } => name,
         }
@@ -258,6 +274,15 @@ impl<'input> FunctionCompiler {
                 Ok(reg)
             }
             Expression::FunctionCall(call) => {
+                let Some(Symbol::Function {
+                    id: function_id, ..
+                }) = symbol_table.borrow().lookup(call.name)
+                else {
+                    return Err(FrontendError::UnknownFunctionCalled {
+                        name: call.name.to_string(),
+                    });
+                };
+
                 let dest = self.allocate_reg();
                 let args = call
                     .args
@@ -267,6 +292,7 @@ impl<'input> FunctionCompiler {
                 body.push(IrInstruction::Call {
                     dest,
                     name: call.name.to_string(),
+                    function_id,
                     args,
                 });
                 Ok(dest)
@@ -331,11 +357,13 @@ mod test {
                 let a = 3;
                 x = -x + 1;
                 return a + x - 2 * 3 / f(a, x);
-            }",
+            }
+            fn f(a, x) { return a + x; }
+            ",
         )
         .unwrap();
         let compiled = compile(program).unwrap();
-        assert_eq!(compiled.len(), 1);
+        assert_eq!(compiled.len(), 2);
 
         let f = &compiled[0];
         assert_eq!(f.name, "the_answer");
@@ -351,7 +379,7 @@ mod test {
                 mvi(6, 2),
                 mvi(7, 3),
                 mul(8, 6, 7),
-                call(9, "f", vec![0, 4]),
+                call(9, "f", 1, vec![0, 4]),
                 div(10, 8, 9),
                 sub(11, 5, 10),
                 ret(11),
@@ -466,5 +494,12 @@ mod test {
             error.to_string(),
             "variable \"x\" cannot shadow function argument with the same name"
         );
+    }
+
+    #[test]
+    fn unknown_function_called() {
+        let program = parse_program(r"fn f(x) { return g(); }").unwrap();
+        let error = compile(program).unwrap_err();
+        assert_eq!(error.to_string(), "unknown function \"g\" called");
     }
 }

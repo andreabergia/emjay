@@ -9,8 +9,8 @@ use crate::backend_aarch64::Aarch64Generator;
 use crate::backend_x64_linux::X64LinuxGenerator;
 
 use crate::{
-    backend::{BackendError, CompiledFunctionCatalog, FunctionId, JitFn, MachineCodeGenerator},
-    frontend::{self, FrontendError},
+    backend::{BackendError, CompiledFunctionCatalog, JitFn, MachineCodeGenerator},
+    frontend::{self, FrontendError, FunctionId},
     parser,
 };
 

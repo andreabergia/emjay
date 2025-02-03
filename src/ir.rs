@@ -1,5 +1,7 @@
 use core::fmt;
 
+use crate::frontend::FunctionId;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]
 pub struct IrRegister {
     value: u32,
@@ -94,6 +96,7 @@ pub enum IrInstruction {
     Call {
         dest: IrRegister,
         name: String,
+        function_id: FunctionId,
         args: Vec<IrRegister>,
     },
 }
@@ -145,8 +148,13 @@ impl fmt::Display for IrInstruction {
                 write!(f, "div  @r{}, r{}, r{}", dest, op1, op2)
             }
             IrInstruction::Ret { reg } => write!(f, "ret  r{}", reg),
-            IrInstruction::Call { dest, name, args } => {
-                write!(f, "call @r{}, {}(", dest, name)?;
+            IrInstruction::Call {
+                dest,
+                function_id,
+                name,
+                args,
+            } => {
+                write!(f, "call @r{}, {}:{}(", dest, name, function_id.0)?;
                 for (i, arg) in args.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
@@ -236,9 +244,10 @@ pub mod builders {
         }
     }
 
-    pub fn call(dest: u32, name: &str, args: Vec<u32>) -> IrInstruction {
+    pub fn call(dest: u32, name: &str, id: usize, args: Vec<u32>) -> IrInstruction {
         IrInstruction::Call {
             dest: IrRegister::from_u32(dest),
+            function_id: FunctionId(id),
             name: name.to_string(),
             args: args.into_iter().map(IrRegister::from_u32).collect(),
         }
