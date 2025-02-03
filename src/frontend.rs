@@ -89,14 +89,21 @@ impl<'input> SymbolTable<'input> {
         self.names_to_symbols.insert(name, symbol);
     }
 
-    // TODO: we shouldn't need two lookups in the table
-    fn store_location(&mut self, name: &str, register: IrRegister) {
+    /// Updates the location of the given name. It's important that this happens in the
+    /// declaring scope of the value, because if we have something like:
+    /// ```
+    /// let a = 1;
+    /// { a = 2; }
+    /// return a
+    /// ```
+    /// the update in the nested block should be visible to the `return`.
+    fn update_location(&mut self, name: &str, register: IrRegister) {
         let symbol = self.names_to_symbols.get_mut(name);
         match symbol {
             None => match &self.parent {
                 None => panic!("trying to overwrite undeclared identifier {}", name),
                 Some(parent) => {
-                    parent.borrow_mut().store_location(name, register);
+                    parent.borrow_mut().update_location(name, register);
                 }
             },
             Some(Symbol::Argument { .. }) => panic!("cannot assign location of arguments {}", name),
@@ -176,7 +183,7 @@ impl<'input> FunctionCompiler {
                         Some(Symbol::Variable { .. }) => {
                             let reg =
                                 self.compile_expression(body, expression, symbol_table.clone())?;
-                            symbol_table.borrow_mut().store_location(name, reg);
+                            symbol_table.borrow_mut().update_location(name, reg);
                         }
                         Some(Symbol::Argument { name, index }) => {
                             let reg = self.allocate_reg();
@@ -194,7 +201,7 @@ impl<'input> FunctionCompiler {
 
                             let reg =
                                 self.compile_expression(body, expression, symbol_table.clone())?;
-                            symbol_table.borrow_mut().store_location(name, reg);
+                            symbol_table.borrow_mut().update_location(name, reg);
                         }
                         _ => {
                             return Err(FrontendError::VariableNotDefined {
