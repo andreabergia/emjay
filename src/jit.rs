@@ -132,10 +132,7 @@ pub fn jit_compile_program(source: &str, main_function_name: &str) -> Result<Jit
         debug!("Machine code:\n{}", machine_code_for_debug);
 
         let fun_ptr = unsafe { to_function_pointer(&machine_code.machine_code)? };
-        function_catalog.store_function_pointer(
-            function_catalog.get_function_id(function.name).unwrap(),
-            fun_ptr,
-        );
+        function_catalog.store_function_pointer(function.id, fun_ptr);
 
         if main_function_name == function.name {
             main_function = Some(fun_ptr);
