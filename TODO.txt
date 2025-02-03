@@ -8,4 +8,3 @@
   - [x] add tests of undeclared identifier or double declaration
 - [x] get rid of doubles
 - [x] negate
-- [ ] procedure call
