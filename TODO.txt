@@ -1,8 +1,7 @@
-- [ ] spans
 - [ ] function call
   - [ ] check number of arguments
   - [x] forward arguments to trampoline
-  - [ ] move function not found and resolution to frontend
+  - [x] move function not found and resolution to frontend
 - [x] symbol table
   - [x] store functions ?
   - [x] test nested blocks
