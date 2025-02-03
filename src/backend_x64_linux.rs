@@ -277,6 +277,7 @@ impl MachineCodeGenerator for X64LinuxGenerator {
                 )?,
                 IrInstruction::MvArg { .. } => todo!("function arguments"),
                 IrInstruction::Call { .. } => todo!("function call"),
+                IrInstruction::Neg { .. } => todo!("negate"),
             }
         }
 

@@ -557,6 +557,10 @@ impl MachineCodeGenerator for Aarch64Generator {
                     instructions.push(Aarch64Instruction::Ret);
                 }
 
+                IrInstruction::Neg { dest: _, op: _ } => {
+                    todo!()
+                }
+
                 IrInstruction::Add { dest, op1, op2 } => {
                     self.do_binop(
                         &mut instructions,

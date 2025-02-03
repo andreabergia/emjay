@@ -272,7 +272,12 @@ impl<'input> FunctionCompiler {
                 });
                 Ok(dest)
             }
-            Expression::Negate(_) => todo!(),
+            Expression::Negate(expr) => {
+                let op = self.compile_expression(body, expr, symbol_table.clone())?;
+                let dest = self.allocate_reg();
+                body.push(IrInstruction::Neg { dest, op });
+                Ok(dest)
+            }
             Expression::Add(left, right) => {
                 let op1 = self.compile_expression(body, left, symbol_table.clone())?;
                 let op2 = self.compile_expression(body, right, symbol_table)?;
@@ -315,7 +320,7 @@ impl<'input> FunctionCompiler {
 mod test {
     use super::*;
     use crate::{
-        ir::builders::{add, call, div, mul, mvarg, mvi, ret, sub},
+        ir::builders::{add, call, div, mul, mvarg, mvi, neg, ret, sub},
         parser::*,
     };
 
@@ -325,7 +330,7 @@ mod test {
             r"
             fn the_answer(x) {
                 let a = 3;
-                x = x + 1;
+                x = -x + 1;
                 return a + x - 2 * 3 / f(a, x);
             }",
         )
@@ -335,23 +340,24 @@ mod test {
 
         let f = &compiled[0];
         assert_eq!(f.name, "the_answer");
-        assert_eq!(f.num_used_registers, 11);
+        assert_eq!(f.num_used_registers, 12);
         assert_eq!(
-            f.body,
             vec![
                 mvi(0, 3),
                 mvarg(1, 0),
-                mvi(2, 1),
-                add(3, 1, 2),
-                add(4, 0, 3),
-                mvi(5, 2),
-                mvi(6, 3),
-                mul(7, 5, 6),
-                call(8, "f", vec![0, 3]),
-                div(9, 7, 8),
-                sub(10, 4, 9),
-                ret(10),
-            ]
+                neg(2, 1),
+                mvi(3, 1),
+                add(4, 2, 3),
+                add(5, 0, 4),
+                mvi(6, 2),
+                mvi(7, 3),
+                mul(8, 6, 7),
+                call(9, "f", vec![0, 4]),
+                div(10, 8, 9),
+                sub(11, 5, 10),
+                ret(11),
+            ],
+            f.body,
         );
     }
 

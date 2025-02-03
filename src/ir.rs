@@ -83,6 +83,10 @@ pub enum IrInstruction {
         op1: IrRegister,
         op2: IrRegister,
     },
+    Neg {
+        dest: IrRegister,
+        op: IrRegister,
+    },
 
     Ret {
         reg: IrRegister,
@@ -99,6 +103,7 @@ impl IrInstruction {
         match self {
             IrInstruction::Mvi { dest, .. } => vec![*dest].into_iter(),
             IrInstruction::MvArg { dest, .. } => vec![*dest].into_iter(),
+            IrInstruction::Neg { dest, op } => vec![*dest, *op].into_iter(),
             IrInstruction::Add { dest, op1, op2 } => vec![*dest, *op1, *op2].into_iter(),
             IrInstruction::Sub { dest, op1, op2 } => vec![*dest, *op1, *op2].into_iter(),
             IrInstruction::Mul { dest, op1, op2 } => vec![*dest, *op1, *op2].into_iter(),
@@ -126,6 +131,7 @@ impl fmt::Display for IrInstruction {
         match self {
             IrInstruction::Mvi { dest, val } => write!(f, "mvi  @r{}, {}", dest, val),
             IrInstruction::MvArg { dest, arg } => write!(f, "mva  @r{}, a{}", dest, arg),
+            IrInstruction::Neg { dest, op } => write!(f, "neg @r{}, r{}", dest, op),
             IrInstruction::Add { dest, op1, op2 } => {
                 write!(f, "add  @r{}, r{}, r{}", dest, op1, op2)
             }
@@ -182,6 +188,13 @@ pub mod builders {
         IrInstruction::MvArg {
             dest: IrRegister::from_u32(dest),
             arg: ArgumentIndex::from(arg),
+        }
+    }
+
+    pub fn neg(dest: u32, op: u32) -> IrInstruction {
+        IrInstruction::Neg {
+            dest: IrRegister::from_u32(dest),
+            op: IrRegister::from_u32(op),
         }
     }
 
