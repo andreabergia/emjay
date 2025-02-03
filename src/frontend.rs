@@ -11,15 +11,9 @@ use crate::{
 #[allow(clippy::enum_variant_names)]
 pub enum FrontendError {
     #[error("variable \"{name}\" not defined")]
-    VariableNotDefined {
-        name: String,
-        // TODO: location: SourceLocation,
-    },
+    VariableNotDefined { name: String },
     #[error("variable \"{name}\" already defined")]
-    VariableAlreadyDefined {
-        name: String,
-        // TODO: location: SourceLocation,
-    },
+    VariableAlreadyDefined { name: String },
     #[error("variable \"{name}\" cannot shadow function argument with the same name")]
     VariableCannotShadowArgument { name: String },
 }

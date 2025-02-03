@@ -182,7 +182,6 @@ pub fn jit_call_trampoline(
     let fun = function_catalog.get_function_pointer(FunctionId(function_index));
     debug!("  function pointer found: {:?}", fun);
 
-    // TODO: do a proper cast in the catalog?
     let fun: fn(i64, i64, i64, i64, i64, i64, i64) -> i64 = unsafe { std::mem::transmute(fun) };
     let result = fun(a0, a1, a2, a3, a4, a5, a6);
 

@@ -1,10 +1,11 @@
-- [ ] symbol table
-  - [ ] store functions ?
-  - [x] test nested blocks
-  - [x] add tests of undeclared identifier or double declaration
 - [ ] spans
 - [ ] function call
   - [ ] check number of arguments
   - [x] forward arguments to trampoline
   - [ ] move function not found and resolution to frontend
+- [x] symbol table
+  - [x] store functions ?
+  - [x] test nested blocks
+  - [x] add tests of undeclared identifier or double declaration
 - [x] get rid of doubles
+- [x] negate
