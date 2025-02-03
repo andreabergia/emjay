@@ -21,8 +21,6 @@ pub struct GeneratedMachineCode {
 pub enum BackendError {
     #[error("not implemented: {0}")]
     NotImplemented(String),
-    #[error("function not found: {0}")]
-    FunctionNotFound(String),
 }
 
 pub type JitFn = fn(i64, i64, i64, i64, i64, i64) -> i64;

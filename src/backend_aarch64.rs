@@ -662,15 +662,11 @@ impl MachineCodeGenerator for Aarch64Generator {
 
                 IrInstruction::Call {
                     dest,
-                    name,
-                    function_id: _,
+                    name: _,
+                    function_id: called_function_id,
                     args: call_args,
                 } => {
                     let dest: usize = (*dest).into();
-
-                    let called_function_index = function_catalog
-                        .get_function_id(name)
-                        .ok_or_else(|| BackendError::FunctionNotFound(name.to_string()))?;
 
                     let fn_catalog_addr: usize =
                         function_catalog as *const CompiledFunctionCatalog as usize;
@@ -703,7 +699,7 @@ impl MachineCodeGenerator for Aarch64Generator {
                     });
                     instructions.push(Aarch64Instruction::MovImmToReg {
                         register: Register::X1,
-                        value: called_function_index.0 as i64,
+                        value: called_function_id.0 as i64,
                     });
 
                     // Fill arguments
