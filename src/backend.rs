@@ -59,7 +59,7 @@ impl CompiledFunctionCatalog {
     }
 
     /// Stores a function pointer. Requirement: it must be called in order of `id`
-    /// and;for each function in the program
+    /// and for each function in the program
     pub fn store_function_pointer(&mut self, id: FunctionId, fun_ptr: JitFn) {
         assert!(id.0 == self.addresses.len());
         self.addresses.insert(id.0, fun_ptr);
