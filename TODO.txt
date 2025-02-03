@@ -1,5 +1,5 @@
-- [ ] function call
-  - [ ] check number of arguments
+- [x] function call
+  - [x] check number of arguments
   - [x] forward arguments to trampoline
   - [x] move function not found and resolution to frontend
 - [x] symbol table

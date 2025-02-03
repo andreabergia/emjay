@@ -11,7 +11,6 @@ use crate::{
 pub struct FunctionId(pub usize);
 
 #[derive(Debug, Error)]
-#[allow(clippy::enum_variant_names)]
 pub enum FrontendError {
     #[error("variable \"{name}\" not defined")]
     VariableNotDefined { name: String },
@@ -21,6 +20,14 @@ pub enum FrontendError {
     VariableCannotShadowArgument { name: String },
     #[error("unknown function \"{name}\" called")]
     UnknownFunctionCalled { name: String },
+    #[error(
+        "function \"{function_name}\" requires {expected} argument(s) but was called with {actual}"
+    )]
+    InvalidArgumentsToFunctionCall {
+        function_name: String,
+        expected: usize,
+        actual: usize,
+    },
 }
 
 pub fn compile(program: Program) -> Result<Vec<CompiledFunction>, FrontendError> {
@@ -31,6 +38,9 @@ pub fn compile(program: Program) -> Result<Vec<CompiledFunction>, FrontendError>
         global_symbol_table.borrow_mut().put(Symbol::Function {
             id: FunctionId(index),
             name: function.name,
+            signature: FunctionSignature {
+                num_arguments: function.args.len(),
+            },
         });
     });
 
@@ -46,10 +56,16 @@ pub fn compile(program: Program) -> Result<Vec<CompiledFunction>, FrontendError>
 }
 
 #[derive(Clone)]
+struct FunctionSignature {
+    num_arguments: usize,
+}
+
+#[derive(Clone)]
 enum Symbol<'input> {
     Function {
         id: FunctionId,
         name: &'input str,
+        signature: FunctionSignature,
     },
     Variable {
         name: &'input str,
@@ -278,13 +294,23 @@ impl<'input> FunctionCompiler {
             }
             Expression::FunctionCall(call) => {
                 let Some(Symbol::Function {
-                    id: function_id, ..
+                    id: function_id,
+                    signature,
+                    ..
                 }) = symbol_table.borrow().lookup(call.name)
                 else {
                     return Err(FrontendError::UnknownFunctionCalled {
                         name: call.name.to_string(),
                     });
                 };
+
+                if call.args.len() != signature.num_arguments {
+                    return Err(FrontendError::InvalidArgumentsToFunctionCall {
+                        function_name: call.name.to_string(),
+                        expected: signature.num_arguments,
+                        actual: call.args.len(),
+                    });
+                }
 
                 let dest = self.allocate_reg();
                 let args = call
@@ -505,5 +531,21 @@ mod test {
         let program = parse_program(r"fn f(x) { return g(); }").unwrap();
         let error = compile(program).unwrap_err();
         assert_eq!(error.to_string(), "unknown function \"g\" called");
+    }
+
+    #[test]
+    fn function_arguments_mismatch() {
+        let program = parse_program(
+            r"
+            fn f(x) { return g(); }
+            fn g(y) { return 0; }
+            ",
+        )
+        .unwrap();
+        let error = compile(program).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "function \"g\" requires 1 argument(s) but was called with 0"
+        );
     }
 }
