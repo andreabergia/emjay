@@ -189,21 +189,27 @@ where
 mod tests {
     use crate::{
         backend_register_allocator::{allocate, AllocatedLocation},
+        frontend::FunctionId,
         ir::{
             builders::{add, mvi},
-            CompiledFunction,
+            CompiledFunction, IrInstruction,
         },
     };
+
+    fn fun(body: Vec<IrInstruction>, num_used_registers: usize) -> CompiledFunction<'static> {
+        CompiledFunction {
+            name: "test",
+            id: FunctionId(0),
+            num_args: 0,
+            body,
+            num_used_registers,
+        }
+    }
 
     #[test]
     fn can_allocate_and_handle_spillover() {
         let allocations = allocate(
-            &CompiledFunction {
-                name: "test",
-                num_args: 0,
-                body: vec![mvi(0, 0), mvi(1, 1), add(2, 0, 1)],
-                num_used_registers: 3,
-            },
+            &fun(vec![mvi(0, 0), mvi(1, 1), add(2, 0, 1)], 3),
             vec!["h0"],
         );
 
@@ -220,13 +226,11 @@ mod tests {
     #[test]
     fn can_reuse_free_registers() {
         let allocations = allocate(
-            &CompiledFunction {
-                name: "test",
-                num_args: 0,
+            &fun(
                 // Register h2 is unused after instruction #2, so we can reuse it for #3
-                body: vec![mvi(0, 0), mvi(1, 1), mvi(2, 2), add(3, 0, 1)],
-                num_used_registers: 4,
-            },
+                vec![mvi(0, 0), mvi(1, 1), mvi(2, 2), add(3, 0, 1)],
+                4,
+            ),
             vec!["h0", "h1", "h2"],
         );
 

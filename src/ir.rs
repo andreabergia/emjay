@@ -124,6 +124,7 @@ impl IrInstruction {
 #[derive(Debug)]
 pub struct CompiledFunction<'input> {
     pub name: &'input str,
+    pub id: FunctionId,
     pub num_args: usize,
     pub body: Vec<IrInstruction>,
     pub num_used_registers: usize,

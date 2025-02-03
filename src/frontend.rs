@@ -37,9 +37,10 @@ pub fn compile(program: Program) -> Result<Vec<CompiledFunction>, FrontendError>
     // Then do a second pass to actually compile each function
     program
         .iter()
-        .map(|f| {
+        .enumerate()
+        .map(|(index, function)| {
             let mut compiler = FunctionCompiler::default();
-            compiler.compile_function(f, global_symbol_table.clone())
+            compiler.compile_function(function, FunctionId(index), global_symbol_table.clone())
         })
         .collect()
 }
@@ -137,16 +138,18 @@ struct FunctionCompiler {
 impl<'input> FunctionCompiler {
     fn compile_function(
         &mut self,
-        f: &Function<'input>,
+        function: &Function<'input>,
+        id: FunctionId,
         parent_symbol_table: SymbolTableRef<'input>,
     ) -> Result<CompiledFunction<'input>, FrontendError> {
         let symbol_table = SymbolTable::with_parent(parent_symbol_table);
         let mut body: Vec<IrInstruction> = Vec::new();
-        Self::define_args(f, symbol_table.clone());
-        self.compile_block(&mut body, &f.block, symbol_table)?;
+        Self::define_args(function, symbol_table.clone());
+        self.compile_block(&mut body, &function.block, symbol_table)?;
         Ok(CompiledFunction {
-            name: f.name,
-            num_args: f.args.len(),
+            name: function.name,
+            id,
+            num_args: function.args.len(),
             num_used_registers: usize::from(self.next_free_reg),
             body,
         })
@@ -367,6 +370,7 @@ mod test {
 
         let f = &compiled[0];
         assert_eq!(f.name, "the_answer");
+        assert_eq!(f.id, FunctionId(0));
         assert_eq!(f.num_used_registers, 12);
         assert_eq!(
             vec![

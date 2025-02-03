@@ -663,7 +663,7 @@ impl MachineCodeGenerator for Aarch64Generator {
                 IrInstruction::Call {
                     dest,
                     name,
-                    function_id,
+                    function_id: _,
                     args: call_args,
                 } => {
                     let dest: usize = (*dest).into();
