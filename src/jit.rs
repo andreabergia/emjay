@@ -196,10 +196,10 @@ mod tests {
 
     #[test]
     fn can_generate_valid_basic_function() {
-        let source = "fn test() { let a = 2; return a + 1; }";
+        let source = "fn test() { let a = 2; return -a + 1; }";
         let program = super::jit_compile_program(source, "test").expect("function should compile");
         let res = (program.main_function)(0, 0, 0, 0, 0, 0); // Call it!
-        assert_eq!(res, 3);
+        assert_eq!(res, -1);
     }
 
     #[test]

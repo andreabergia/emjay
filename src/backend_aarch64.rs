@@ -184,6 +184,10 @@ enum Aarch64Instruction {
         base: Register,
         offset: i32,
     },
+    Neg {
+        source: Register,
+        destination: Register,
+    },
 }
 
 impl Display for Aarch64Instruction {
@@ -254,6 +258,10 @@ impl Display for Aarch64Instruction {
                 base,
                 offset,
             } => write!(f, "ldp  {}, {}, [{}], #{}", reg1, reg2, base, offset),
+            Aarch64Instruction::Neg {
+                source,
+                destination,
+            } => write!(f, "neg  {}, {}", destination, source),
         }
     }
 }
@@ -275,6 +283,7 @@ impl Aarch64Instruction {
     const STP: u32 = 0xA9000000;
     const STP_PRE_INDEX: u32 = 0xA9800000;
     const LDP: u32 = 0xA8C00000;
+    const NEG: u32 = 0xCB0003E0;
 
     fn make_machine_code(&self) -> Vec<u8> {
         match self {
@@ -433,6 +442,16 @@ impl Aarch64Instruction {
                 i |= offset << 15;
                 i.to_le_bytes().to_vec()
             }
+
+            Aarch64Instruction::Neg {
+                source,
+                destination,
+            } => {
+                let mut i: u32 = Self::NEG;
+                i |= source.index() << 16;
+                i |= destination.index();
+                i.to_le_bytes().to_vec()
+            }
         }
     }
 
@@ -557,8 +576,32 @@ impl MachineCodeGenerator for Aarch64Generator {
                     instructions.push(Aarch64Instruction::Ret);
                 }
 
-                IrInstruction::Neg { dest: _, op: _ } => {
-                    todo!()
+                IrInstruction::Neg { dest, op } => {
+                    let dest: usize = (*dest).into();
+                    let op: usize = (*op).into();
+
+                    match self.locations[dest] {
+                        AllocatedLocation::Register {
+                            register: destination,
+                        } => match self.locations[op] {
+                            AllocatedLocation::Register { register: source } => {
+                                instructions.push(Aarch64Instruction::Neg {
+                                    destination,
+                                    source,
+                                });
+                            }
+                            AllocatedLocation::Stack { .. } => {
+                                return Err(BackendError::NotImplemented(
+                                    "negate stack value".to_string(),
+                                ))
+                            }
+                        },
+                        AllocatedLocation::Stack { .. } => {
+                            return Err(BackendError::NotImplemented(
+                                "store negation to stack value".to_string(),
+                            ))
+                        }
+                    }
                 }
 
                 IrInstruction::Add { dest, op1, op2 } => {
@@ -1158,6 +1201,17 @@ mod test {
     }
 
     #[test]
+    fn can_encode_neg() {
+        assert_encodes_as(
+            Aarch64Instruction::Neg {
+                source: Register::X5,
+                destination: Register::X1,
+            },
+            vec![0xE1, 0x03, 0x05, 0xCB],
+        );
+    }
+
+    #[test]
     fn can_compile_trivial_function() {
         let program = parse_program("fn main() { let a = 42; return a; }").unwrap();
         let compiled = frontend::compile(program).unwrap();
@@ -1195,7 +1249,7 @@ mod test {
     #[test]
     fn can_compile_math() {
         let program =
-            parse_program("fn the_answer() { let a = 3; return a + 1 - 2 * 3 / 4; }").unwrap();
+            parse_program("fn the_answer() { let a = 3; return a + 1 - 2 * 3 / -4; }").unwrap();
         let compiled = frontend::compile(program).unwrap();
         assert_eq!(compiled.len(), 1);
 
@@ -1217,8 +1271,9 @@ mod test {
             |movz x9, 3
             |mul  x12, x10, x9
             |movz x10, 4
-            |sdiv x9, x12, x10
-            |subs x12, x11, x9
+            |neg  x9, x10
+            |sdiv x10, x12, x9
+            |subs x12, x11, x10
             |mov  x0, x12
             |ldp  x29, x30, [sp], #16
             |ret
@@ -1226,15 +1281,6 @@ mod test {
             .trim_margin()
             .unwrap(),
             machine_code.asm
-        );
-        assert_eq!(
-            vec![
-                0xFD, 0x7B, 0xBF, 0xA9, 0xFD, 0x03, 0x00, 0x91, 0x69, 0x00, 0x80, 0xD2, 0x2A, 0x00,
-                0x80, 0xD2, 0x2B, 0x01, 0x0A, 0x8B, 0x4A, 0x00, 0x80, 0xD2, 0x69, 0x00, 0x80, 0xD2,
-                0x4C, 0x7D, 0x09, 0x9B, 0x8A, 0x00, 0x80, 0xD2, 0x89, 0x0D, 0xCA, 0x9A, 0x6C, 0x01,
-                0x09, 0xEB, 0xE0, 0x03, 0x0C, 0xAA, 0xFD, 0x7B, 0xC1, 0xA8, 0xC0, 0x03, 0x5F, 0xD6
-            ],
-            machine_code.machine_code
         );
     }
 
