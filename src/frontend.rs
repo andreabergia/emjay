@@ -37,9 +37,6 @@ pub fn compile(program: Program) -> Result<Vec<CompiledFunction>, FrontendError>
 
 #[derive(Clone)]
 enum Symbol<'input> {
-    Function {
-        name: &'input str,
-    },
     Variable {
         name: &'input str,
         allocated_register: IrRegister,
@@ -53,7 +50,6 @@ enum Symbol<'input> {
 impl<'input> Symbol<'input> {
     fn name(&self) -> &'input str {
         match self {
-            Symbol::Function { name } => name,
             Symbol::Variable { name, .. } => name,
             Symbol::Argument { name, .. } => name,
         }
@@ -103,7 +99,6 @@ impl<'input> SymbolTable<'input> {
                     parent.borrow_mut().store_location(name, register);
                 }
             },
-            Some(Symbol::Function { .. }) => panic!("cannot assign location of function {}", name),
             Some(Symbol::Argument { .. }) => panic!("cannot assign location of arguments {}", name),
             Some(Symbol::Variable {
                 allocated_register, ..
