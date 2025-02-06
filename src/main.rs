@@ -13,6 +13,7 @@ mod frontend;
 mod grammar;
 mod ir;
 mod jit;
+mod optimization;
 mod parser;
 mod program_counter;
 

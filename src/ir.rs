@@ -54,7 +54,7 @@ impl fmt::Display for ArgumentIndex {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum IrInstruction {
     Mvi {
         dest: IrRegister,

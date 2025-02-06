@@ -11,7 +11,7 @@ use crate::backend_x64_linux::X64LinuxGenerator;
 use crate::{
     backend::{BackendError, CompiledFunctionCatalog, JitFn, MachineCodeGenerator},
     frontend::{self, FrontendError, FunctionId},
-    parser,
+    optimization, parser,
 };
 
 #[derive(Debug, Error)]
@@ -96,6 +96,7 @@ pub fn jit_compile_program(source: &str, main_function_name: &str) -> Result<Jit
 
     let program = parser::parse_program(source)?;
     let compiled_functions = frontend::compile(program)?;
+    let optimized_functions = optimization::optimize(compiled_functions);
 
     #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
     let mut gen = X64LinuxGenerator::default();
@@ -104,12 +105,12 @@ pub fn jit_compile_program(source: &str, main_function_name: &str) -> Result<Jit
 
     // Create the function catalog and stores it in a box, to ensure that it will be at a fixed
     // address and not be de-allocated
-    let mut function_catalog = Box::new(CompiledFunctionCatalog::new(&compiled_functions));
+    let mut function_catalog = Box::new(CompiledFunctionCatalog::new(&optimized_functions));
     let function_catalog_ptr: *const CompiledFunctionCatalog = &*function_catalog;
     debug!("function catalog: {:0X}", function_catalog_ptr as usize);
 
     let mut main_function = None;
-    for function in compiled_functions.iter() {
+    for function in optimized_functions.iter() {
         let _span = span!(Level::DEBUG, "jit function", name = function.name);
         debug!("compiling function: {}", function.name);
         debug!("ir:\n{}", function);
