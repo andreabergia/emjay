@@ -498,63 +498,55 @@ impl MachineCodeGenerator for Aarch64Generator {
             match instruction {
                 IrInstruction::Mvi { dest, val } => {
                     let dest: usize = (*dest).into();
-                    match self.locations[dest] {
-                        AllocatedLocation::Register { register } => {
-                            instructions.push(Aarch64Instruction::MovImmToReg {
-                                register,
-                                value: *val,
-                            })
-                        }
-                        AllocatedLocation::Stack { offset: _ } => {
-                            return Err(BackendError::NotImplemented(
-                                "move immediate to stack".to_string(),
-                            ))
-                        }
-                    }
+                    let AllocatedLocation::Register { register } = self.locations[dest] else {
+                        return Err(BackendError::NotImplemented(
+                            "move immediate to stack".to_string(),
+                        ));
+                    };
+
+                    instructions.push(Aarch64Instruction::MovImmToReg {
+                        register,
+                        value: *val,
+                    })
                 }
 
                 IrInstruction::MvArg { dest, arg } => {
+                    let location = Self::get_argument_location(*arg)?;
+                    let AllocatedLocation::Register { register: source } = location else {
+                        return Err(BackendError::NotImplemented(
+                            "move argument from stack".to_string(),
+                        ));
+                    };
+
                     let dest: usize = (*dest).into();
-                    match self.locations[dest] {
-                        AllocatedLocation::Register { register } => {
-                            let location = Self::get_argument_location(*arg)?;
-                            match location {
-                                AllocatedLocation::Register { register: source } => {
-                                    instructions.push(Aarch64Instruction::MovRegToReg {
-                                        source,
-                                        destination: register,
-                                    });
-                                }
-                                AllocatedLocation::Stack { offset: _ } => {
-                                    return Err(BackendError::NotImplemented(
-                                        "move argument from stack".to_string(),
-                                    ))
-                                }
-                            }
-                        }
-                        AllocatedLocation::Stack { offset: _ } => {
-                            return Err(BackendError::NotImplemented(
-                                "move argument to stack".to_string(),
-                            ))
-                        }
-                    }
+                    let AllocatedLocation::Register {
+                        register: destination,
+                    } = self.locations[dest]
+                    else {
+                        return Err(BackendError::NotImplemented(
+                            "move argument to stack".to_string(),
+                        ));
+                    };
+
+                    instructions.push(Aarch64Instruction::MovRegToReg {
+                        source,
+                        destination,
+                    });
                 }
 
                 IrInstruction::Ret { reg } => {
-                    let dest: usize = (*reg).into();
-                    match self.locations[dest] {
-                        AllocatedLocation::Register { register } => {
-                            instructions.push(Aarch64Instruction::MovRegToReg {
-                                source: register,
-                                destination: Register::X0,
-                            });
-                        }
-                        AllocatedLocation::Stack { offset: _ } => {
-                            return Err(BackendError::NotImplemented(
-                                "return value from stack".to_string(),
-                            ))
-                        }
-                    }
+                    let reg: usize = (*reg).into();
+                    let AllocatedLocation::Register { register: source } = self.locations[reg]
+                    else {
+                        return Err(BackendError::NotImplemented(
+                            "return value from stack".to_string(),
+                        ));
+                    };
+
+                    instructions.push(Aarch64Instruction::MovRegToReg {
+                        source,
+                        destination: Register::X0,
+                    });
 
                     // We will replace this with the correct LDP at the end,
                     // once the final stack depth has been computed
@@ -565,31 +557,28 @@ impl MachineCodeGenerator for Aarch64Generator {
                 }
 
                 IrInstruction::Neg { dest, op } => {
-                    let dest: usize = (*dest).into();
                     let op: usize = (*op).into();
+                    let AllocatedLocation::Register { register: source } = self.locations[op]
+                    else {
+                        return Err(BackendError::NotImplemented(
+                            "negate stack value".to_string(),
+                        ));
+                    };
 
-                    match self.locations[dest] {
-                        AllocatedLocation::Register {
-                            register: destination,
-                        } => match self.locations[op] {
-                            AllocatedLocation::Register { register: source } => {
-                                instructions.push(Aarch64Instruction::Neg {
-                                    destination,
-                                    source,
-                                });
-                            }
-                            AllocatedLocation::Stack { .. } => {
-                                return Err(BackendError::NotImplemented(
-                                    "negate stack value".to_string(),
-                                ))
-                            }
-                        },
-                        AllocatedLocation::Stack { .. } => {
-                            return Err(BackendError::NotImplemented(
-                                "store negation to stack value".to_string(),
-                            ))
-                        }
-                    }
+                    let dest: usize = (*dest).into();
+                    let AllocatedLocation::Register {
+                        register: destination,
+                    } = self.locations[dest]
+                    else {
+                        return Err(BackendError::NotImplemented(
+                            "store negation to stack value".to_string(),
+                        ));
+                    };
+
+                    instructions.push(Aarch64Instruction::Neg {
+                        destination,
+                        source,
+                    });
                 }
 
                 IrInstruction::Add { dest, op1, op2 } => {
@@ -693,34 +682,29 @@ impl MachineCodeGenerator for Aarch64Generator {
                     for (call_arg, actual_arg) in call_args.iter().enumerate() {
                         let shifted_call_arg = call_arg + 2; // X0 and X1 are already used
                         let actual_arg: usize = (*actual_arg).into();
-                        match self.locations[actual_arg] {
-                            AllocatedLocation::Register {
-                                register: actual_arg_register,
-                            } => {
-                                let arg_location =
-                                    Self::get_argument_location((shifted_call_arg).into())?;
-                                match arg_location {
-                                    AllocatedLocation::Register {
-                                        register: call_convention_arg_register,
-                                    } => {
-                                        instructions.push(Aarch64Instruction::MovRegToReg {
-                                            source: actual_arg_register,
-                                            destination: call_convention_arg_register,
-                                        });
-                                    }
-                                    AllocatedLocation::Stack { .. } => {
-                                        return Err(BackendError::NotImplemented(
-                                            "functions with more than 8 arguments".to_string(),
-                                        ))
-                                    }
-                                }
-                            }
-                            AllocatedLocation::Stack { offset: _ } => {
-                                return Err(BackendError::NotImplemented(
-                                    "passing arguments to function from stack".to_string(),
-                                ))
-                            }
-                        }
+                        let AllocatedLocation::Register {
+                            register: actual_arg_register,
+                        } = self.locations[actual_arg]
+                        else {
+                            return Err(BackendError::NotImplemented(
+                                "passing arguments to function from stack".to_string(),
+                            ));
+                        };
+
+                        let arg_location = Self::get_argument_location((shifted_call_arg).into())?;
+                        let AllocatedLocation::Register {
+                            register: call_convention_arg_register,
+                        } = arg_location
+                        else {
+                            return Err(BackendError::NotImplemented(
+                                "functions with more than 8 arguments".to_string(),
+                            ));
+                        };
+
+                        instructions.push(Aarch64Instruction::MovRegToReg {
+                            source: actual_arg_register,
+                            destination: call_convention_arg_register,
+                        });
                     }
                     instructions.push(Aarch64Instruction::MovImmToReg {
                         register: Register::X19,
@@ -744,19 +728,19 @@ impl MachineCodeGenerator for Aarch64Generator {
                     self.pop(&mut instructions, Register::X19);
 
                     // Copy result (x0) to the opportune register
-                    match self.locations[dest] {
-                        AllocatedLocation::Register {
-                            register: destination,
-                        } => instructions.push(Aarch64Instruction::MovRegToReg {
-                            source: Register::X0,
-                            destination,
-                        }),
-                        AllocatedLocation::Stack { offset: _ } => {
-                            return Err(BackendError::NotImplemented(
-                                "move register to stack".to_string(),
-                            ))
-                        }
-                    }
+                    let AllocatedLocation::Register {
+                        register: destination,
+                    } = self.locations[dest]
+                    else {
+                        return Err(BackendError::NotImplemented(
+                            "move register to stack".to_string(),
+                        ));
+                    };
+
+                    instructions.push(Aarch64Instruction::MovRegToReg {
+                        source: Register::X0,
+                        destination,
+                    });
 
                     self.pop(&mut instructions, Register::X0);
                 }
@@ -855,25 +839,24 @@ impl Aarch64Generator {
         let op2: usize = op2.into();
         let dest: usize = dest.into();
 
-        match self.locations[op1] {
-            AllocatedLocation::Register { register: reg1 } => match self.locations[op2] {
-                AllocatedLocation::Register { register: reg2 } => match self.locations[dest] {
-                    AllocatedLocation::Register { register: dest } => {
-                        instructions.push(callback(dest, reg1, reg2));
-                        Ok(())
-                    }
-                    AllocatedLocation::Stack { offset: _ } => Err(BackendError::NotImplemented(
-                        "binop when destination is in stack".to_string(),
-                    )),
-                },
-                AllocatedLocation::Stack { offset: _ } => Err(BackendError::NotImplemented(
-                    "binop when one operand is in stack".to_string(),
-                )),
-            },
-            AllocatedLocation::Stack { offset: _ } => Err(BackendError::NotImplemented(
+        let AllocatedLocation::Register { register: reg1 } = self.locations[op1] else {
+            return Err(BackendError::NotImplemented(
                 "binop when one operand is in stack".to_string(),
-            )),
-        }
+            ));
+        };
+        let AllocatedLocation::Register { register: reg2 } = self.locations[op2] else {
+            return Err(BackendError::NotImplemented(
+                "binop when one operand is in stack".to_string(),
+            ));
+        };
+        let AllocatedLocation::Register { register: dest } = self.locations[dest] else {
+            return Err(BackendError::NotImplemented(
+                "binop when destination is in stack".to_string(),
+            ));
+        };
+
+        instructions.push(callback(dest, reg1, reg2));
+        Ok(())
     }
 
     fn push(&mut self, instructions: &mut Vec<Aarch64Instruction>, register: Register) {

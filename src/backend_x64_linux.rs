@@ -131,7 +131,7 @@ impl X64Instruction {
         })
     }
 
-    // TODO: I am not clear how to encode this in a generalized way.
+    // TODO: I am not clear how to encode this in a generalized way, so I have built this hardcoded table
     fn lookup_reg_reg(&self, source: Register, destination: Register) -> Result<u8, BackendError> {
         match (source, destination) {
             (Register::Rax, Register::Rbx) => Ok(0xC3),
@@ -180,19 +180,15 @@ impl MachineCodeGenerator for X64LinuxGenerator {
             match instruction {
                 IrInstruction::Mvi { dest, val } => {
                     let dest: usize = (*dest).into();
-                    match self.locations[dest] {
-                        AllocatedLocation::Stack { .. } => {
-                            return Err(BackendError::NotImplemented(
-                                "move immediate to stack".to_string(),
-                            ))
-                        }
-                        AllocatedLocation::Register { register } => {
-                            instructions.push(X64Instruction::MovImmToReg {
-                                register,
-                                value: *val,
-                            })
-                        }
-                    }
+                    let AllocatedLocation::Register { register } = self.locations[dest] else {
+                        return Err(BackendError::NotImplemented(
+                            "move immediate to stack".to_string(),
+                        ));
+                    };
+                    instructions.push(X64Instruction::MovImmToReg {
+                        register,
+                        value: *val,
+                    })
                 }
 
                 IrInstruction::Ret { reg } => {
