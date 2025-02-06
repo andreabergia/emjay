@@ -275,9 +275,18 @@ impl MachineCodeGenerator for X64LinuxGenerator {
                         }
                     },
                 )?,
-                IrInstruction::MvArg { .. } => todo!("function arguments"),
-                IrInstruction::Call { .. } => todo!("function call"),
-                IrInstruction::Neg { .. } => todo!("negate"),
+                IrInstruction::MvArg { .. } => {
+                    return Err(BackendError::NotImplemented(
+                        "accessing function arguments".to_string(),
+                    ))
+                }
+                IrInstruction::Call { .. } => {
+                    return Err(BackendError::NotImplemented("function calls".to_string()))
+                }
+
+                IrInstruction::Neg { .. } => {
+                    return Err(BackendError::NotImplemented("negate".to_string()))
+                }
             }
         }
 

@@ -492,7 +492,7 @@ impl MachineCodeGenerator for Aarch64Generator {
         function_catalog: &CompiledFunctionCatalog,
     ) -> Result<GeneratedMachineCode, BackendError> {
         self.allocate_registers(function);
-        self.compute_used_args_registers(function);
+        self.compute_used_args_registers(function)?;
 
         let mut instructions = Vec::new();
         let mut ldp_to_fix = Vec::new();
@@ -530,7 +530,8 @@ impl MachineCodeGenerator for Aarch64Generator {
                     let dest: usize = (*dest).into();
                     match self.locations[dest] {
                         AllocatedLocation::Register { register } => {
-                            match Self::get_argument_location(*arg) {
+                            let location = Self::get_argument_location(*arg)?;
+                            match location {
                                 AllocatedLocation::Register { register: source } => {
                                     instructions.push(Aarch64Instruction::MovRegToReg {
                                         source,
@@ -709,19 +710,25 @@ impl MachineCodeGenerator for Aarch64Generator {
                         match self.locations[actual_arg] {
                             AllocatedLocation::Register {
                                 register: actual_arg_register,
-                            } => match Self::get_argument_location((shifted_call_arg).into()) {
-                                AllocatedLocation::Register {
-                                    register: call_convention_arg_register,
-                                } => {
-                                    instructions.push(Aarch64Instruction::MovRegToReg {
-                                        source: actual_arg_register,
-                                        destination: call_convention_arg_register,
-                                    });
+                            } => {
+                                let arg_location =
+                                    Self::get_argument_location((shifted_call_arg).into())?;
+                                match arg_location {
+                                    AllocatedLocation::Register {
+                                        register: call_convention_arg_register,
+                                    } => {
+                                        instructions.push(Aarch64Instruction::MovRegToReg {
+                                            source: actual_arg_register,
+                                            destination: call_convention_arg_register,
+                                        });
+                                    }
+                                    AllocatedLocation::Stack { .. } => {
+                                        return Err(BackendError::NotImplemented(
+                                            "functions with more than 8 arguments".to_string(),
+                                        ))
+                                    }
                                 }
-                                AllocatedLocation::Stack { .. } => {
-                                    todo!("more than 8 arguments")
-                                }
-                            },
+                            }
                             AllocatedLocation::Stack { offset: _ } => {
                                 return Err(BackendError::NotImplemented(
                                     "passing arguments to function from stack".to_string(),
@@ -826,18 +833,24 @@ impl Aarch64Generator {
         }
     }
 
-    fn compute_used_args_registers(&mut self, function: &CompiledFunction) {
+    fn compute_used_args_registers(
+        &mut self,
+        function: &CompiledFunction,
+    ) -> Result<(), BackendError> {
         for arg in 0..function.num_args {
-            let location = Self::get_argument_location(arg.into());
+            let location = Self::get_argument_location(arg.into())?;
             match location {
                 AllocatedLocation::Register { register } => {
                     self.used_args_registers.push(register);
                 }
                 AllocatedLocation::Stack { offset: _ } => {
-                    todo!("support for more than 8 arguments");
+                    return Err(BackendError::NotImplemented(
+                        "functions with more than 8 arguments".to_string(),
+                    ))
                 }
             }
         }
+        Ok(())
     }
 
     fn do_binop(
@@ -892,34 +905,39 @@ impl Aarch64Generator {
         self.stack_offset -= 8;
     }
 
-    fn get_argument_location(arg: ArgumentIndex) -> AllocatedLocation<Register> {
+    fn get_argument_location(
+        arg: ArgumentIndex,
+    ) -> Result<AllocatedLocation<Register>, BackendError> {
         let arg: usize = arg.into();
+        // Should probably use some macro...
         match arg {
-            0 => AllocatedLocation::Register {
+            0 => Ok(AllocatedLocation::Register {
                 register: Register::X0,
-            },
-            1 => AllocatedLocation::Register {
+            }),
+            1 => Ok(AllocatedLocation::Register {
                 register: Register::X1,
-            },
-            2 => AllocatedLocation::Register {
+            }),
+            2 => Ok(AllocatedLocation::Register {
                 register: Register::X2,
-            },
-            3 => AllocatedLocation::Register {
+            }),
+            3 => Ok(AllocatedLocation::Register {
                 register: Register::X3,
-            },
-            4 => AllocatedLocation::Register {
+            }),
+            4 => Ok(AllocatedLocation::Register {
                 register: Register::X4,
-            },
-            5 => AllocatedLocation::Register {
+            }),
+            5 => Ok(AllocatedLocation::Register {
                 register: Register::X5,
-            },
-            6 => AllocatedLocation::Register {
+            }),
+            6 => Ok(AllocatedLocation::Register {
                 register: Register::X6,
-            },
-            7 => AllocatedLocation::Register {
+            }),
+            7 => Ok(AllocatedLocation::Register {
                 register: Register::X7,
-            },
-            _ => todo!("Support for more than 8 arguments"),
+            }),
+            _ => Err(BackendError::NotImplemented(
+                "support for more than 8 arguments".to_string(),
+            )),
         }
     }
 }
