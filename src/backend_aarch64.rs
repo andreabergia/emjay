@@ -411,13 +411,7 @@ impl Aarch64Instruction {
                 i |= reg1.index();
                 i |= reg2.index() << 10;
                 i |= base.index() << 5;
-                let offset: u32 = unsafe {
-                    std::mem::transmute(if *offset > 0 {
-                        offset >> 3
-                    } else {
-                        (offset >> 3) & 0x7F
-                    })
-                };
+                let offset: u32 = unsafe { std::mem::transmute((offset >> 3) & 0x7F) };
                 i |= offset << 15;
                 i.to_le_bytes().to_vec()
             }
@@ -432,13 +426,7 @@ impl Aarch64Instruction {
                 i |= reg1.index();
                 i |= reg2.index() << 10;
                 i |= base.index() << 5;
-                let offset: u32 = unsafe {
-                    std::mem::transmute(if *offset > 0 {
-                        offset >> 3
-                    } else {
-                        (offset >> 3) & 0x7F
-                    })
-                };
+                let offset: u32 = unsafe { std::mem::transmute((offset >> 3) & 0x7F) };
                 i |= offset << 15;
                 i.to_le_bytes().to_vec()
             }
@@ -495,14 +483,13 @@ impl MachineCodeGenerator for Aarch64Generator {
         self.compute_used_args_registers(function)?;
 
         let mut instructions = Vec::new();
-        let mut ldp_to_fix = Vec::new();
+        let mut index_of_ldp_to_fix = Vec::new();
         self.stack_offset += 16;
         self.max_stack_offset = self.stack_offset;
 
         // This will be overwritten at the end, once we have completed computation
         // of the necessary stack depth
         instructions.push(Aarch64Instruction::Nop);
-
         instructions.push(Aarch64Instruction::MovSpToReg {
             destination: Register::X29,
         });
@@ -571,7 +558,7 @@ impl MachineCodeGenerator for Aarch64Generator {
 
                     // We will replace this with the correct LDP at the end,
                     // once the final stack depth has been computed
-                    ldp_to_fix.push(instructions.len());
+                    index_of_ldp_to_fix.push(instructions.len());
                     instructions.push(Aarch64Instruction::Nop);
 
                     instructions.push(Aarch64Instruction::Ret);
@@ -671,8 +658,7 @@ impl MachineCodeGenerator for Aarch64Generator {
 
                     let fn_catalog_addr: usize =
                         function_catalog as *const CompiledFunctionCatalog as usize;
-                    let jit_call_trampoline_address: usize =
-                        (jit_call_trampoline as fn(_, _, _, _, _, _, _, _, _) -> _) as usize;
+                    let jit_call_trampoline_address: usize = jit_call_trampoline as usize;
 
                     self.push(&mut instructions, Register::X0);
 
@@ -740,6 +726,8 @@ impl MachineCodeGenerator for Aarch64Generator {
                         register: Register::X19,
                         value: jit_call_trampoline_address as i64,
                     });
+
+                    // We can finally do the actual call!
                     instructions.push(Aarch64Instruction::Blr {
                         register: Register::X19,
                     });
@@ -776,7 +764,7 @@ impl MachineCodeGenerator for Aarch64Generator {
         }
 
         // Replace the prologue and epilogue, now that we know the maximum stack depth
-        let stack_depth_to_reserve = (self.max_stack_offset + 15) & !15; // Must be 16-byte aligned
+        let stack_depth_to_reserve = (self.max_stack_offset + 15) & 0xFFFFFFF0; // Must be 16-byte aligned
         instructions[0] = Aarch64Instruction::Stp {
             reg1: Register::X29,
             reg2: Register::X30,
@@ -784,7 +772,7 @@ impl MachineCodeGenerator for Aarch64Generator {
             offset: -(stack_depth_to_reserve as i32),
             pre_indexing: true,
         };
-        for ldp_to_fix_index in ldp_to_fix {
+        for ldp_to_fix_index in index_of_ldp_to_fix {
             instructions[ldp_to_fix_index] = Aarch64Instruction::Ldp {
                 reg1: Register::X29,
                 reg2: Register::X30,
@@ -809,6 +797,8 @@ impl Aarch64Generator {
         let allocations = backend_register_allocator::allocate::<Register>(
             function,
             vec![
+                // Caller-seved registers only
+                // TODO: add X19-X28 (callee-saved registers) and save them before modifying
                 Register::X9,
                 Register::X10,
                 Register::X11,
@@ -816,7 +806,6 @@ impl Aarch64Generator {
                 Register::X13,
                 Register::X14,
                 Register::X15,
-                // TODO: add X19-X28 and save them before modifying
             ],
         );
         self.locations = allocations;
@@ -826,6 +815,7 @@ impl Aarch64Generator {
                 // This looks quadratic, but actually we only have 7 registers.
                 // Therefore this is actually 7 * N i.e. linear. Probably faster
                 // than a hash set.
+                // And, once again, this is a toy, not an efficient compiler!
                 if !self.used_registers.contains(register) {
                     self.used_registers.push(*register);
                 }
@@ -1314,8 +1304,7 @@ mod test {
         let function_catalog = Box::new(CompiledFunctionCatalog::new(&compiled));
         let fn_catalog_addr: usize =
             function_catalog.as_ref() as *const CompiledFunctionCatalog as usize;
-        let jit_call_trampoline_address: usize =
-            (jit_call_trampoline as fn(_, _, _, _, _, _, _, _, _) -> _) as usize;
+        let jit_call_trampoline_address: usize = jit_call_trampoline as usize;
 
         let mut gen = Aarch64Generator::default();
         let machine_code = gen
