@@ -25,8 +25,6 @@ fn parse_expression(rule: Pair<'_, Rule>) -> Expression {
             Rule::sub => Expression::Sub(Box::new(left), Box::new(right)),
             Rule::mul => Expression::Mul(Box::new(left), Box::new(right)),
             Rule::div => Expression::Div(Box::new(left), Box::new(right)),
-            Rule::pow => Expression::Pow(Box::new(left), Box::new(right)),
-            Rule::rem => Expression::Rem(Box::new(left), Box::new(right)),
             _ => unreachable!(),
         })
         .parse(rule.into_inner())

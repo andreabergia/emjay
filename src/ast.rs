@@ -38,7 +38,5 @@ pub enum Expression<'input> {
     Sub(Box<Self>, Box<Self>),
     Mul(Box<Self>, Box<Self>),
     Div(Box<Self>, Box<Self>),
-    Pow(Box<Self>, Box<Self>),
-    Rem(Box<Self>, Box<Self>),
     FunctionCall(FunctionCall<'input>),
 }

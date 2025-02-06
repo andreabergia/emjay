@@ -12,7 +12,6 @@ static EMJAY_PRATT_PARSER: LazyLock<PrattParser<Rule>> = LazyLock::new(|| {
     PrattParser::new()
         .op(Op::infix(Rule::add, Assoc::Left) | Op::infix(Rule::sub, Assoc::Left))
         .op(Op::infix(Rule::mul, Assoc::Left) | Op::infix(Rule::div, Assoc::Left))
-        .op(Op::infix(Rule::pow, Assoc::Right))
         .op(Op::prefix(Rule::neg))
 });
 

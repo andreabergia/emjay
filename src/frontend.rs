@@ -360,8 +360,6 @@ impl<'input> FunctionCompiler {
                 body.push(IrInstruction::Div { dest, op1, op2 });
                 Ok(dest)
             }
-
-            _ => todo!(),
         }
     }
 
