@@ -3,8 +3,10 @@ use std::fmt::{Display, Write};
 use crate::{
     backend::{BackendError, CompiledFunctionCatalog, GeneratedMachineCode, MachineCodeGenerator},
     backend_register_allocator::{self, AllocatedLocation},
-    ir::{CompiledFunction, IrInstruction, IrRegister},
+    ir::{BinOpOperator::*, CompiledFunction, IrInstruction, IrRegister},
 };
+use Register::*;
+use X64Instruction::*;
 
 const NUM_SIZE: usize = 8;
 
@@ -23,14 +25,14 @@ enum Register {
 impl Register {
     fn index(&self) -> u8 {
         match self {
-            Register::Rax => 0,
-            Register::Rcx => 1,
-            Register::Rdx => 2,
-            Register::Rbx => 3,
-            Register::Rsp => 4,
-            Register::Rbp => 5,
-            Register::Rsi => 6,
-            Register::R11 => 11,
+            Rax => 0,
+            Rcx => 1,
+            Rdx => 2,
+            Rbx => 3,
+            Rsp => 4,
+            Rbp => 5,
+            Rsi => 6,
+            R11 => 11,
         }
     }
 }
@@ -38,14 +40,14 @@ impl Register {
 impl Display for Register {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Register::Rax => write!(f, "rax"),
-            Register::Rcx => write!(f, "rcx"),
-            Register::Rdx => write!(f, "rdx"),
-            Register::Rbx => write!(f, "rbx"),
-            Register::Rsp => write!(f, "rsp"),
-            Register::Rbp => write!(f, "rbp"),
-            Register::Rsi => write!(f, "rsi"),
-            Register::R11 => write!(f, "r11"),
+            Rax => write!(f, "rax"),
+            Rcx => write!(f, "rcx"),
+            Rdx => write!(f, "rdx"),
+            Rbx => write!(f, "rbx"),
+            Rsp => write!(f, "rsp"),
+            Rbp => write!(f, "rbp"),
+            Rsi => write!(f, "rsi"),
+            R11 => write!(f, "r11"),
         }
     }
 }
@@ -83,20 +85,20 @@ enum X64Instruction {
 impl Display for X64Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            X64Instruction::Push { register: reg } => write!(f, "push {}", reg),
-            X64Instruction::Pop { register: reg } => write!(f, "pop  {}", reg),
-            X64Instruction::Retn => write!(f, "retn"),
-            X64Instruction::MovImmToReg { register, value } => {
+            Push { register: reg } => write!(f, "push {}", reg),
+            Pop { register: reg } => write!(f, "pop  {}", reg),
+            Retn => write!(f, "retn"),
+            MovImmToReg { register, value } => {
                 write!(f, "mov  {}, {}", register, value)
             }
-            X64Instruction::MovRegToReg {
+            MovRegToReg {
                 source,
                 destination,
             } => write!(f, "mov  {}, {}", destination, source),
-            X64Instruction::AddRegToRax { register } => write!(f, "add  rax, {}", register),
-            X64Instruction::SubRegFromRax { register } => write!(f, "sub  rax, {}", register),
-            X64Instruction::MulRegToRax { register } => write!(f, "add  rax, {}", register),
-            X64Instruction::DivRegFromRax { register } => write!(f, "div  {}", register),
+            AddRegToRax { register } => write!(f, "add  rax, {}", register),
+            SubRegFromRax { register } => write!(f, "sub  rax, {}", register),
+            MulRegToRax { register } => write!(f, "add  rax, {}", register),
+            DivRegFromRax { register } => write!(f, "div  {}", register),
         }
     }
 }
@@ -104,28 +106,28 @@ impl Display for X64Instruction {
 impl X64Instruction {
     fn make_machine_code(&self) -> Result<Vec<u8>, BackendError> {
         Ok(match self {
-            X64Instruction::Retn => vec![0xC3],
-            X64Instruction::Push { register } => vec![0x50 + register.index()],
-            X64Instruction::Pop { register } => vec![0x58 + register.index()],
-            X64Instruction::MovImmToReg { register, value } => {
+            Retn => vec![0xC3],
+            Push { register } => vec![0x50 + register.index()],
+            Pop { register } => vec![0x58 + register.index()],
+            MovImmToReg { register, value } => {
                 let mut vec = vec![0x48, 0xB8 + register.index()];
                 vec.extend_from_slice(&(*value).to_le_bytes());
                 vec
             }
-            X64Instruction::MovRegToReg {
+            MovRegToReg {
                 source,
                 destination,
             } => vec![0x48, 0x89, self.lookup_reg_reg(*source, *destination)?],
-            X64Instruction::AddRegToRax { register } => {
-                vec![0x48, 0x01, self.lookup_reg_reg(*register, Register::Rax)?]
+            AddRegToRax { register } => {
+                vec![0x48, 0x01, self.lookup_reg_reg(*register, Rax)?]
             }
-            X64Instruction::SubRegFromRax { register } => {
-                vec![0x48, 0x29, self.lookup_reg_reg(*register, Register::Rax)?]
+            SubRegFromRax { register } => {
+                vec![0x48, 0x29, self.lookup_reg_reg(*register, Rax)?]
             }
-            X64Instruction::MulRegToRax { register } => {
+            MulRegToRax { register } => {
                 vec![0x48, 0xF7, 0xE0 + register.index()]
             }
-            X64Instruction::DivRegFromRax { register } => {
+            DivRegFromRax { register } => {
                 vec![0x48, 0xF7, 0xF0 + register.index()]
             }
         })
@@ -134,18 +136,18 @@ impl X64Instruction {
     // TODO: I am not clear how to encode this in a generalized way, so I have built this hardcoded table
     fn lookup_reg_reg(&self, source: Register, destination: Register) -> Result<u8, BackendError> {
         match (source, destination) {
-            (Register::Rax, Register::Rbx) => Ok(0xC3),
-            (Register::Rax, Register::Rcx) => Ok(0xC1),
-            (Register::Rax, Register::Rdx) => Ok(0xC2),
-            (Register::Rbx, Register::Rax) => Ok(0xD8),
-            (Register::Rcx, Register::Rax) => Ok(0xC8),
-            (Register::Rdx, Register::Rax) => Ok(0xD0),
-            (Register::Rsp, Register::Rbp) => Ok(0xE5),
-            (Register::Rbp, Register::Rsp) => Ok(0xEC),
-            (Register::Rax, Register::Rsi) => Ok(0xC6),
-            (Register::Rsi, Register::Rax) => Ok(0xF0),
-            (Register::R11, Register::Rdx) => Ok(0xDA),
-            (Register::Rdx, Register::R11) => Ok(0xD3),
+            (Rax, Rbx) => Ok(0xC3),
+            (Rax, Rcx) => Ok(0xC1),
+            (Rax, Rdx) => Ok(0xC2),
+            (Rbx, Rax) => Ok(0xD8),
+            (Rcx, Rax) => Ok(0xC8),
+            (Rdx, Rax) => Ok(0xD0),
+            (Rsp, Rbp) => Ok(0xE5),
+            (Rbp, Rsp) => Ok(0xEC),
+            (Rax, Rsi) => Ok(0xC6),
+            (Rsi, Rax) => Ok(0xF0),
+            (R11, Rdx) => Ok(0xDA),
+            (Rdx, R11) => Ok(0xD3),
             _ => Err(BackendError::NotImplemented(format!(
                 "encoding of move from reg {source} to reg {destination}",
             ))),
@@ -168,12 +170,10 @@ impl MachineCodeGenerator for X64LinuxGenerator {
 
         let mut instructions = Vec::new();
 
-        instructions.push(X64Instruction::Push {
-            register: Register::Rbp,
-        });
-        instructions.push(X64Instruction::MovRegToReg {
-            source: Register::Rsp,
-            destination: Register::Rbp,
+        instructions.push(Push { register: Rbp });
+        instructions.push(MovRegToReg {
+            source: Rsp,
+            destination: Rbp,
         });
 
         for instruction in function.body.iter() {
@@ -185,7 +185,7 @@ impl MachineCodeGenerator for X64LinuxGenerator {
                             "move immediate to stack".to_string(),
                         ));
                     };
-                    instructions.push(X64Instruction::MovImmToReg {
+                    instructions.push(MovImmToReg {
                         register,
                         value: *val,
                     })
@@ -195,10 +195,8 @@ impl MachineCodeGenerator for X64LinuxGenerator {
                     self.move_to_accumulator(reg, &mut instructions)?;
 
                     // Epilogue and then return
-                    instructions.push(X64Instruction::Pop {
-                        register: Register::Rbp,
-                    });
-                    instructions.push(X64Instruction::Retn);
+                    instructions.push(Pop { register: Rbp });
+                    instructions.push(Retn);
                 }
 
                 IrInstruction::BinOp {
@@ -217,50 +215,38 @@ impl MachineCodeGenerator for X64LinuxGenerator {
                             ))
                         }
                         AllocatedLocation::Register { register } => match operator {
-                            crate::ir::BinOpOperator::Add => {
-                                instructions.push(X64Instruction::AddRegToRax { register })
-                            }
-                            crate::ir::BinOpOperator::Sub => {
-                                instructions.push(X64Instruction::SubRegFromRax { register })
-                            }
-                            crate::ir::BinOpOperator::Mul => {
-                                instructions.push(X64Instruction::MulRegToRax { register })
-                            }
-                            crate::ir::BinOpOperator::Div => {
+                            Add => instructions.push(AddRegToRax { register }),
+                            Sub => instructions.push(SubRegFromRax { register }),
+                            Mul => instructions.push(MulRegToRax { register }),
+                            Div => {
                                 // DIV is different from most other instructions: it will forcibly
                                 // divide rdx:rax by the given register. For the accumulator we
                                 // are fine, but we need to set rdx to zero, and to do so we backup
                                 // its value. Furthermore, we might have that the divisor is actually
                                 // in rdx. In that case, we move the divisor to r11 (which we know we
                                 // have never allocated) and use `div r11`.
-                                if register == Register::Rdx {
-                                    instructions.push(X64Instruction::MovRegToReg {
-                                        source: Register::Rdx,
-                                        destination: Register::R11,
+                                if register == Rdx {
+                                    instructions.push(MovRegToReg {
+                                        source: Rdx,
+                                        destination: R11,
                                     });
-                                    instructions.push(X64Instruction::MovImmToReg {
-                                        register: Register::Rdx,
+                                    instructions.push(MovImmToReg {
+                                        register: Rdx,
                                         value: 0,
                                     });
-                                    instructions.push(X64Instruction::DivRegFromRax {
-                                        register: Register::R11,
-                                    });
-                                    instructions.push(X64Instruction::MovRegToReg {
-                                        source: Register::R11,
-                                        destination: Register::Rdx,
+                                    instructions.push(DivRegFromRax { register: R11 });
+                                    instructions.push(MovRegToReg {
+                                        source: R11,
+                                        destination: Rdx,
                                     });
                                 } else {
-                                    instructions.push(X64Instruction::Push {
-                                        register: Register::Rdx,
-                                    });
-                                    instructions.push(X64Instruction::MovImmToReg {
-                                        register: Register::Rdx,
+                                    instructions.push(Push { register: Rdx });
+                                    instructions.push(MovImmToReg {
+                                        register: Rdx,
                                         value: 0,
                                     });
-                                    instructions.push(X64Instruction::DivRegFromRax { register });
-                                    instructions.push(X64Instruction::Pop {
-                                        register: Register::Rdx,
-                                    });
+                                    instructions.push(DivRegFromRax { register });
+                                    instructions.push(Pop { register: Rdx });
                                 }
                             }
                         },
@@ -269,8 +255,8 @@ impl MachineCodeGenerator for X64LinuxGenerator {
                     let dest: usize = (*dest).into();
                     match self.locations[dest] {
                         AllocatedLocation::Register { register } => {
-                            instructions.push(X64Instruction::MovRegToReg {
-                                source: Register::Rax,
+                            instructions.push(MovRegToReg {
+                                source: Rax,
                                 destination: register,
                             });
                         }
@@ -311,10 +297,7 @@ impl MachineCodeGenerator for X64LinuxGenerator {
 
 impl X64LinuxGenerator {
     fn allocate_registers(&mut self, function: &CompiledFunction) {
-        let allocations = backend_register_allocator::allocate(
-            function,
-            vec![Register::Rcx, Register::Rdx, Register::Rbx, Register::Rsi],
-        );
+        let allocations = backend_register_allocator::allocate(function, vec![Rcx, Rdx, Rbx, Rsi]);
         self.locations.extend(allocations);
     }
 
@@ -326,9 +309,9 @@ impl X64LinuxGenerator {
         let reg: usize = (*reg).into();
         match self.locations[reg] {
             AllocatedLocation::Register { register } => {
-                instructions.push(X64Instruction::MovRegToReg {
+                instructions.push(MovRegToReg {
                     source: register,
-                    destination: Register::Rax,
+                    destination: Rax,
                 });
                 Ok(())
             }

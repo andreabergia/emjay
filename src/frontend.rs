@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use crate::{
     ast::{Block, BlockElement, Expression, Function, Program},
-    ir::{BinOpOperator, CompiledFunction, IrInstruction, IrRegister},
+    ir::{BinOpOperator::*, CompiledFunction, IrInstruction, IrRegister},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -337,7 +337,7 @@ impl<'input> FunctionCompiler {
                 let op2 = self.compile_expression(body, right, symbol_table)?;
                 let dest = self.allocate_reg();
                 body.push(IrInstruction::BinOp {
-                    operator: BinOpOperator::Add,
+                    operator: Add,
                     dest,
                     op1,
                     op2,
@@ -349,7 +349,7 @@ impl<'input> FunctionCompiler {
                 let op2 = self.compile_expression(body, right, symbol_table)?;
                 let dest = self.allocate_reg();
                 body.push(IrInstruction::BinOp {
-                    operator: BinOpOperator::Sub,
+                    operator: Sub,
                     dest,
                     op1,
                     op2,
@@ -361,7 +361,7 @@ impl<'input> FunctionCompiler {
                 let op2 = self.compile_expression(body, right, symbol_table)?;
                 let dest = self.allocate_reg();
                 body.push(IrInstruction::BinOp {
-                    operator: BinOpOperator::Mul,
+                    operator: Mul,
                     dest,
                     op1,
                     op2,
@@ -373,7 +373,7 @@ impl<'input> FunctionCompiler {
                 let op2 = self.compile_expression(body, right, symbol_table)?;
                 let dest = self.allocate_reg();
                 body.push(IrInstruction::BinOp {
-                    operator: BinOpOperator::Div,
+                    operator: Div,
                     dest,
                     op1,
                     op2,

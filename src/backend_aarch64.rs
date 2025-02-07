@@ -6,9 +6,11 @@ use std::{
 use crate::{
     backend::{BackendError, CompiledFunctionCatalog, GeneratedMachineCode, MachineCodeGenerator},
     backend_register_allocator::{self, AllocatedLocation},
-    ir::{ArgumentIndex, BinOpOperator, CompiledFunction, IrInstruction},
+    ir::{ArgumentIndex, BinOpOperator::*, CompiledFunction, IrInstruction},
     jit::jit_call_trampoline,
 };
+use Aarch64Instruction::*;
+use Register::*;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Register {
@@ -49,38 +51,38 @@ enum Register {
 impl Register {
     fn index(&self) -> u32 {
         match self {
-            Register::X0 => 0,
-            Register::X1 => 1,
-            Register::X2 => 2,
-            Register::X3 => 3,
-            Register::X4 => 4,
-            Register::X5 => 5,
-            Register::X6 => 6,
-            Register::X7 => 7,
-            Register::X8 => 8,
-            Register::X9 => 9,
-            Register::X10 => 10,
-            Register::X11 => 11,
-            Register::X12 => 12,
-            Register::X13 => 13,
-            Register::X14 => 14,
-            Register::X15 => 15,
-            Register::X16 => 16,
-            Register::X17 => 17,
-            Register::X18 => 18,
-            Register::X19 => 19,
-            Register::X20 => 20,
-            Register::X21 => 21,
-            Register::X22 => 22,
-            Register::X23 => 23,
-            Register::X24 => 24,
-            Register::X25 => 25,
-            Register::X26 => 26,
-            Register::X27 => 27,
-            Register::X28 => 28,
-            Register::X29 => 29,
-            Register::X30 => 30,
-            Register::Sp => 31,
+            X0 => 0,
+            X1 => 1,
+            X2 => 2,
+            X3 => 3,
+            X4 => 4,
+            X5 => 5,
+            X6 => 6,
+            X7 => 7,
+            X8 => 8,
+            X9 => 9,
+            X10 => 10,
+            X11 => 11,
+            X12 => 12,
+            X13 => 13,
+            X14 => 14,
+            X15 => 15,
+            X16 => 16,
+            X17 => 17,
+            X18 => 18,
+            X19 => 19,
+            X20 => 20,
+            X21 => 21,
+            X22 => 22,
+            X23 => 23,
+            X24 => 24,
+            X25 => 25,
+            X26 => 26,
+            X27 => 27,
+            X28 => 28,
+            X29 => 29,
+            X30 => 30,
+            Sp => 31,
         }
     }
 }
@@ -88,38 +90,38 @@ impl Register {
 impl Display for Register {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Register::X0 => write!(f, "x0"),
-            Register::X1 => write!(f, "x1"),
-            Register::X2 => write!(f, "x2"),
-            Register::X3 => write!(f, "x3"),
-            Register::X4 => write!(f, "x4"),
-            Register::X5 => write!(f, "x5"),
-            Register::X6 => write!(f, "x6"),
-            Register::X7 => write!(f, "x7"),
-            Register::X8 => write!(f, "x8"),
-            Register::X9 => write!(f, "x9"),
-            Register::X10 => write!(f, "x10"),
-            Register::X11 => write!(f, "x11"),
-            Register::X12 => write!(f, "x12"),
-            Register::X13 => write!(f, "x13"),
-            Register::X14 => write!(f, "x14"),
-            Register::X15 => write!(f, "x15"),
-            Register::X16 => write!(f, "x16"),
-            Register::X17 => write!(f, "x17"),
-            Register::X18 => write!(f, "x18"),
-            Register::X19 => write!(f, "x19"),
-            Register::X20 => write!(f, "x20"),
-            Register::X21 => write!(f, "x21"),
-            Register::X22 => write!(f, "x22"),
-            Register::X23 => write!(f, "x23"),
-            Register::X24 => write!(f, "x24"),
-            Register::X25 => write!(f, "x25"),
-            Register::X26 => write!(f, "x26"),
-            Register::X27 => write!(f, "x27"),
-            Register::X28 => write!(f, "x28"),
-            Register::X29 => write!(f, "x29"),
-            Register::X30 => write!(f, "x30"),
-            Register::Sp => write!(f, "sp"),
+            X0 => write!(f, "x0"),
+            X1 => write!(f, "x1"),
+            X2 => write!(f, "x2"),
+            X3 => write!(f, "x3"),
+            X4 => write!(f, "x4"),
+            X5 => write!(f, "x5"),
+            X6 => write!(f, "x6"),
+            X7 => write!(f, "x7"),
+            X8 => write!(f, "x8"),
+            X9 => write!(f, "x9"),
+            X10 => write!(f, "x10"),
+            X11 => write!(f, "x11"),
+            X12 => write!(f, "x12"),
+            X13 => write!(f, "x13"),
+            X14 => write!(f, "x14"),
+            X15 => write!(f, "x15"),
+            X16 => write!(f, "x16"),
+            X17 => write!(f, "x17"),
+            X18 => write!(f, "x18"),
+            X19 => write!(f, "x19"),
+            X20 => write!(f, "x20"),
+            X21 => write!(f, "x21"),
+            X22 => write!(f, "x22"),
+            X23 => write!(f, "x23"),
+            X24 => write!(f, "x24"),
+            X25 => write!(f, "x25"),
+            X26 => write!(f, "x26"),
+            X27 => write!(f, "x27"),
+            X28 => write!(f, "x28"),
+            X29 => write!(f, "x29"),
+            X30 => write!(f, "x30"),
+            Sp => write!(f, "sp"),
         }
     }
 }
@@ -193,52 +195,52 @@ enum Aarch64Instruction {
 impl Display for Aarch64Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Aarch64Instruction::Nop => write!(f, "nop"),
-            Aarch64Instruction::Ret => write!(f, "ret"),
-            Aarch64Instruction::MovImmToReg { register, value } => {
+            Nop => write!(f, "nop"),
+            Ret => write!(f, "ret"),
+            MovImmToReg { register, value } => {
                 write!(f, "movz {}, {}", register, value)
             }
-            Aarch64Instruction::MovRegToReg {
+            MovRegToReg {
                 source,
                 destination,
             } => {
                 write!(f, "mov  {}, {}", destination, source)
             }
-            Aarch64Instruction::MovSpToReg { destination } => {
+            MovSpToReg { destination } => {
                 write!(f, "mov  {}, sp", destination)
             }
-            Aarch64Instruction::AddRegToReg {
+            AddRegToReg {
                 destination,
                 reg1,
                 reg2,
             } => write!(f, "add  {}, {}, {}", destination, reg1, reg2),
-            Aarch64Instruction::SubRegToReg {
+            SubRegToReg {
                 destination,
                 reg1,
                 reg2,
             } => write!(f, "subs {}, {}, {}", destination, reg1, reg2),
-            Aarch64Instruction::MulRegToReg {
+            MulRegToReg {
                 destination,
                 reg1,
                 reg2,
             } => write!(f, "mul  {}, {}, {}", destination, reg1, reg2),
-            Aarch64Instruction::DivRegToReg {
+            DivRegToReg {
                 destination,
                 reg1,
                 reg2,
             } => write!(f, "sdiv {}, {}, {}", destination, reg1, reg2),
-            Aarch64Instruction::Blr { register } => write!(f, "blr {}", register),
-            Aarch64Instruction::Str {
+            Blr { register } => write!(f, "blr {}", register),
+            Str {
                 source,
                 base,
                 offset,
             } => write!(f, "str  {}, [{}, #{}]", source, base, offset),
-            Aarch64Instruction::Ldr {
+            Ldr {
                 destination,
                 base,
                 offset,
             } => write!(f, "ldr  {}, [{}, #{}]", destination, base, offset),
-            Aarch64Instruction::Stp {
+            Stp {
                 reg1,
                 reg2,
                 base,
@@ -252,13 +254,13 @@ impl Display for Aarch64Instruction {
                     reg1, reg2, base, offset, pre_indexing
                 )
             }
-            Aarch64Instruction::Ldp {
+            Ldp {
                 reg1,
                 reg2,
                 base,
                 offset,
             } => write!(f, "ldp  {}, {}, [{}], #{}", reg1, reg2, base, offset),
-            Aarch64Instruction::Neg {
+            Neg {
                 source,
                 destination,
             } => write!(f, "neg  {}, {}", destination, source),
@@ -287,10 +289,10 @@ impl Aarch64Instruction {
 
     fn make_machine_code(&self) -> Vec<u8> {
         match self {
-            Aarch64Instruction::Nop => vec![0xD5, 0x03, 0x20, 0x1F],
-            Aarch64Instruction::Ret => vec![0xC0, 0x03, 0x5F, 0xD6],
+            Nop => vec![0xD5, 0x03, 0x20, 0x1F],
+            Ret => vec![0xC0, 0x03, 0x5F, 0xD6],
 
-            Aarch64Instruction::MovImmToReg { register, value } => {
+            MovImmToReg { register, value } => {
                 // Note: there are a lot more efficient encoding: for example, we always
                 // use 64 bit registers here, and we could use the bitmask immediate
                 // trick described here:
@@ -326,7 +328,7 @@ impl Aarch64Instruction {
                 result
             }
 
-            Aarch64Instruction::MovRegToReg {
+            MovRegToReg {
                 source,
                 destination,
             } => {
@@ -336,43 +338,43 @@ impl Aarch64Instruction {
                 i.to_le_bytes().to_vec()
             }
 
-            Aarch64Instruction::MovSpToReg { destination } => {
+            MovSpToReg { destination } => {
                 let mut i: u32 = Self::MOV_SP_TO_REG;
                 i |= destination.index();
                 i.to_le_bytes().to_vec()
             }
 
-            Aarch64Instruction::AddRegToReg {
+            AddRegToReg {
                 destination,
                 reg1,
                 reg2,
             } => Self::encode_three_reg_op(Self::ADD, destination, reg1, reg2),
 
-            Aarch64Instruction::SubRegToReg {
+            SubRegToReg {
                 destination,
                 reg1,
                 reg2,
             } => Self::encode_three_reg_op(Self::SUBS, destination, reg1, reg2),
 
-            Aarch64Instruction::MulRegToReg {
+            MulRegToReg {
                 destination,
                 reg1,
                 reg2,
             } => Self::encode_three_reg_op(Self::MUL, destination, reg1, reg2),
 
-            Aarch64Instruction::DivRegToReg {
+            DivRegToReg {
                 destination,
                 reg1,
                 reg2,
             } => Self::encode_three_reg_op(Self::SDIV, destination, reg1, reg2),
 
-            Aarch64Instruction::Blr { register } => {
+            Blr { register } => {
                 let mut i = Self::BLR;
                 i |= register.index() << 5;
                 i.to_le_bytes().to_vec()
             }
 
-            Aarch64Instruction::Str {
+            Str {
                 source,
                 base,
                 offset,
@@ -384,7 +386,7 @@ impl Aarch64Instruction {
                 i.to_le_bytes().to_vec()
             }
 
-            Aarch64Instruction::Ldr {
+            Ldr {
                 destination,
                 base,
                 offset,
@@ -396,7 +398,7 @@ impl Aarch64Instruction {
                 i.to_le_bytes().to_vec()
             }
 
-            Aarch64Instruction::Stp {
+            Stp {
                 reg1,
                 reg2,
                 base,
@@ -416,7 +418,7 @@ impl Aarch64Instruction {
                 i.to_le_bytes().to_vec()
             }
 
-            Aarch64Instruction::Ldp {
+            Ldp {
                 reg1,
                 reg2,
                 base,
@@ -431,7 +433,7 @@ impl Aarch64Instruction {
                 i.to_le_bytes().to_vec()
             }
 
-            Aarch64Instruction::Neg {
+            Neg {
                 source,
                 destination,
             } => {
@@ -489,10 +491,8 @@ impl MachineCodeGenerator for Aarch64Generator {
 
         // This will be overwritten at the end, once we have completed computation
         // of the necessary stack depth
-        instructions.push(Aarch64Instruction::Nop);
-        instructions.push(Aarch64Instruction::MovSpToReg {
-            destination: Register::X29,
-        });
+        instructions.push(Nop);
+        instructions.push(MovSpToReg { destination: X29 });
 
         for instruction in function.body.iter() {
             match instruction {
@@ -504,7 +504,7 @@ impl MachineCodeGenerator for Aarch64Generator {
                         ));
                     };
 
-                    instructions.push(Aarch64Instruction::MovImmToReg {
+                    instructions.push(MovImmToReg {
                         register,
                         value: *val,
                     })
@@ -528,7 +528,7 @@ impl MachineCodeGenerator for Aarch64Generator {
                         ));
                     };
 
-                    instructions.push(Aarch64Instruction::MovRegToReg {
+                    instructions.push(MovRegToReg {
                         source,
                         destination,
                     });
@@ -543,17 +543,17 @@ impl MachineCodeGenerator for Aarch64Generator {
                         ));
                     };
 
-                    instructions.push(Aarch64Instruction::MovRegToReg {
+                    instructions.push(MovRegToReg {
                         source,
-                        destination: Register::X0,
+                        destination: X0,
                     });
 
                     // We will replace this with the correct LDP at the end,
                     // once the final stack depth has been computed
                     index_of_ldp_to_fix.push(instructions.len());
-                    instructions.push(Aarch64Instruction::Nop);
+                    instructions.push(Nop);
 
-                    instructions.push(Aarch64Instruction::Ret);
+                    instructions.push(Ret);
                 }
 
                 IrInstruction::Neg { dest, op } => {
@@ -575,7 +575,7 @@ impl MachineCodeGenerator for Aarch64Generator {
                         ));
                     };
 
-                    instructions.push(Aarch64Instruction::Neg {
+                    instructions.push(Neg {
                         destination,
                         source,
                     });
@@ -611,22 +611,22 @@ impl MachineCodeGenerator for Aarch64Generator {
                     };
 
                     instructions.push(match operator {
-                        BinOpOperator::Add => Aarch64Instruction::AddRegToReg {
+                        Add => AddRegToReg {
                             destination,
                             reg1,
                             reg2,
                         },
-                        BinOpOperator::Sub => Aarch64Instruction::SubRegToReg {
+                        Sub => SubRegToReg {
                             destination,
                             reg1,
                             reg2,
                         },
-                        BinOpOperator::Mul => Aarch64Instruction::MulRegToReg {
+                        Mul => MulRegToReg {
                             destination,
                             reg1,
                             reg2,
                         },
-                        BinOpOperator::Div => Aarch64Instruction::DivRegToReg {
+                        Div => DivRegToReg {
                             destination,
                             reg1,
                             reg2,
@@ -646,10 +646,10 @@ impl MachineCodeGenerator for Aarch64Generator {
                         function_catalog as *const CompiledFunctionCatalog as usize;
                     let jit_call_trampoline_address: usize = jit_call_trampoline as usize;
 
-                    self.push(&mut instructions, Register::X0);
+                    self.push(&mut instructions, X0);
 
                     // We will put the jump address in X19
-                    self.push(&mut instructions, Register::X19);
+                    self.push(&mut instructions, X19);
 
                     // Store all registers being used. We should skip the destination one
                     // for this instruction, since we will overwrite it, but whatever.
@@ -660,18 +660,18 @@ impl MachineCodeGenerator for Aarch64Generator {
                     }
                     let used_args_registers = self.used_args_registers.clone();
                     for used_arg_register in used_args_registers.iter().cloned() {
-                        if used_arg_register != Register::X0 {
+                        if used_arg_register != X0 {
                             self.push(&mut instructions, used_arg_register);
                         }
                     }
 
                     // jit_call_trampoline(function_catalog_ptr, called_function_index, args)
-                    instructions.push(Aarch64Instruction::MovImmToReg {
-                        register: Register::X0,
+                    instructions.push(MovImmToReg {
+                        register: X0,
                         value: fn_catalog_addr as i64,
                     });
-                    instructions.push(Aarch64Instruction::MovImmToReg {
-                        register: Register::X1,
+                    instructions.push(MovImmToReg {
+                        register: X1,
                         value: called_function_id.0 as i64,
                     });
 
@@ -698,31 +698,29 @@ impl MachineCodeGenerator for Aarch64Generator {
                             ));
                         };
 
-                        instructions.push(Aarch64Instruction::MovRegToReg {
+                        instructions.push(MovRegToReg {
                             source: actual_arg_register,
                             destination: call_convention_arg_register,
                         });
                     }
-                    instructions.push(Aarch64Instruction::MovImmToReg {
-                        register: Register::X19,
+                    instructions.push(MovImmToReg {
+                        register: X19,
                         value: jit_call_trampoline_address as i64,
                     });
 
                     // We can finally do the actual call!
-                    instructions.push(Aarch64Instruction::Blr {
-                        register: Register::X19,
-                    });
+                    instructions.push(Blr { register: X19 });
 
                     // Restore registers
                     for used_arg_register in used_args_registers.iter().cloned() {
-                        if used_arg_register != Register::X0 {
+                        if used_arg_register != X0 {
                             self.pop(&mut instructions, used_arg_register);
                         }
                     }
                     for used_register in used_registers.iter().rev().cloned() {
                         self.pop(&mut instructions, used_register);
                     }
-                    self.pop(&mut instructions, Register::X19);
+                    self.pop(&mut instructions, X19);
 
                     // Copy result (x0) to the opportune register
                     let AllocatedLocation::Register {
@@ -734,30 +732,30 @@ impl MachineCodeGenerator for Aarch64Generator {
                         ));
                     };
 
-                    instructions.push(Aarch64Instruction::MovRegToReg {
-                        source: Register::X0,
+                    instructions.push(MovRegToReg {
+                        source: X0,
                         destination,
                     });
 
-                    self.pop(&mut instructions, Register::X0);
+                    self.pop(&mut instructions, X0);
                 }
             }
         }
 
         // Replace the prologue and epilogue, now that we know the maximum stack depth
         let stack_depth_to_reserve = (self.max_stack_offset + 15) & 0xFFFFFFF0; // Must be 16-byte aligned
-        instructions[0] = Aarch64Instruction::Stp {
-            reg1: Register::X29,
-            reg2: Register::X30,
-            base: Register::Sp,
+        instructions[0] = Stp {
+            reg1: X29,
+            reg2: X30,
+            base: Sp,
             offset: -(stack_depth_to_reserve as i32),
             pre_indexing: true,
         };
         for ldp_to_fix_index in index_of_ldp_to_fix {
-            instructions[ldp_to_fix_index] = Aarch64Instruction::Ldp {
-                reg1: Register::X29,
-                reg2: Register::X30,
-                base: Register::Sp,
+            instructions[ldp_to_fix_index] = Ldp {
+                reg1: X29,
+                reg2: X30,
+                base: Sp,
                 offset: stack_depth_to_reserve as i32,
             };
         }
@@ -780,13 +778,7 @@ impl Aarch64Generator {
             vec![
                 // Caller-seved registers only
                 // TODO: add X19-X28 (callee-saved registers) and save them before modifying
-                Register::X9,
-                Register::X10,
-                Register::X11,
-                Register::X12,
-                Register::X13,
-                Register::X14,
-                Register::X15,
+                X9, X10, X11, X12, X13, X14, X15,
             ],
         );
         self.locations = allocations;
@@ -827,17 +819,17 @@ impl Aarch64Generator {
     fn push(&mut self, instructions: &mut Vec<Aarch64Instruction>, register: Register) {
         self.stack_offset += 8;
         self.max_stack_offset = max(self.max_stack_offset, self.stack_offset);
-        instructions.push(Aarch64Instruction::Str {
+        instructions.push(Str {
             source: register,
-            base: Register::X29,
+            base: X29,
             offset: self.stack_offset,
         });
     }
 
     fn pop(&mut self, instructions: &mut Vec<Aarch64Instruction>, register: Register) {
-        instructions.push(Aarch64Instruction::Ldr {
+        instructions.push(Ldr {
             destination: register,
-            base: Register::X29,
+            base: X29,
             offset: self.stack_offset,
         });
         self.stack_offset -= 8;
@@ -849,30 +841,14 @@ impl Aarch64Generator {
         let arg: usize = arg.into();
         // Should probably use some macro...
         match arg {
-            0 => Ok(AllocatedLocation::Register {
-                register: Register::X0,
-            }),
-            1 => Ok(AllocatedLocation::Register {
-                register: Register::X1,
-            }),
-            2 => Ok(AllocatedLocation::Register {
-                register: Register::X2,
-            }),
-            3 => Ok(AllocatedLocation::Register {
-                register: Register::X3,
-            }),
-            4 => Ok(AllocatedLocation::Register {
-                register: Register::X4,
-            }),
-            5 => Ok(AllocatedLocation::Register {
-                register: Register::X5,
-            }),
-            6 => Ok(AllocatedLocation::Register {
-                register: Register::X6,
-            }),
-            7 => Ok(AllocatedLocation::Register {
-                register: Register::X7,
-            }),
+            0 => Ok(AllocatedLocation::Register { register: X0 }),
+            1 => Ok(AllocatedLocation::Register { register: X1 }),
+            2 => Ok(AllocatedLocation::Register { register: X2 }),
+            3 => Ok(AllocatedLocation::Register { register: X3 }),
+            4 => Ok(AllocatedLocation::Register { register: X4 }),
+            5 => Ok(AllocatedLocation::Register { register: X5 }),
+            6 => Ok(AllocatedLocation::Register { register: X6 }),
+            7 => Ok(AllocatedLocation::Register { register: X7 }),
             _ => Err(BackendError::NotImplemented(
                 "support for more than 8 arguments".to_string(),
             )),
@@ -895,8 +871,8 @@ mod test {
     #[test]
     fn can_encode_move_immediate_16_bit() {
         assert_encodes_as(
-            Aarch64Instruction::MovImmToReg {
-                register: Register::X1,
+            MovImmToReg {
+                register: X1,
                 value: 123,
             },
             vec![0x61, 0x0F, 0x80, 0xD2],
@@ -906,8 +882,8 @@ mod test {
     #[test]
     fn can_encode_move_immediate_32_bit() {
         assert_encodes_as(
-            Aarch64Instruction::MovImmToReg {
-                register: Register::X1,
+            MovImmToReg {
+                register: X1,
                 value: 1234567,
             },
             vec![0xE1, 0xD0, 0x9A, 0xD2, 0x41, 0x02, 0xA0, 0xF2],
@@ -917,8 +893,8 @@ mod test {
     #[test]
     fn can_encode_move_immediate_48_bit() {
         assert_encodes_as(
-            Aarch64Instruction::MovImmToReg {
-                register: Register::X1,
+            MovImmToReg {
+                register: X1,
                 value: 12345678901,
             },
             vec![
@@ -930,8 +906,8 @@ mod test {
     #[test]
     fn can_encode_move_immediate_64_bit() {
         assert_encodes_as(
-            Aarch64Instruction::MovImmToReg {
-                register: Register::X1,
+            MovImmToReg {
+                register: X1,
                 value: 1234567890123456,
             },
             vec![
@@ -944,9 +920,9 @@ mod test {
     #[test]
     fn can_encode_move_reg_to_reg() {
         assert_encodes_as(
-            Aarch64Instruction::MovRegToReg {
-                source: Register::X8,
-                destination: Register::X9,
+            MovRegToReg {
+                source: X8,
+                destination: X9,
             },
             vec![0xE9, 0x03, 0x08, 0xAA],
         );
@@ -955,9 +931,7 @@ mod test {
     #[test]
     fn can_encode_mov_sp_to_reg() {
         assert_encodes_as(
-            Aarch64Instruction::MovSpToReg {
-                destination: Register::X29,
-            },
+            MovSpToReg { destination: X29 },
             vec![0xFD, 0x03, 0x00, 0x91],
         );
     }
@@ -965,10 +939,10 @@ mod test {
     #[test]
     fn can_encode_add_reg_to_reg() {
         assert_encodes_as(
-            Aarch64Instruction::AddRegToReg {
-                destination: Register::X0,
-                reg1: Register::X9,
-                reg2: Register::X10,
+            AddRegToReg {
+                destination: X0,
+                reg1: X9,
+                reg2: X10,
             },
             vec![0x20, 0x01, 0x0A, 0x8B],
         );
@@ -977,10 +951,10 @@ mod test {
     #[test]
     fn can_encode_sub_reg_to_reg() {
         assert_encodes_as(
-            Aarch64Instruction::SubRegToReg {
-                destination: Register::X0,
-                reg1: Register::X9,
-                reg2: Register::X10,
+            SubRegToReg {
+                destination: X0,
+                reg1: X9,
+                reg2: X10,
             },
             vec![0x20, 0x01, 0x0A, 0xEB],
         );
@@ -989,10 +963,10 @@ mod test {
     #[test]
     fn can_encode_mul_reg_to_reg() {
         assert_encodes_as(
-            Aarch64Instruction::MulRegToReg {
-                destination: Register::X0,
-                reg1: Register::X9,
-                reg2: Register::X10,
+            MulRegToReg {
+                destination: X0,
+                reg1: X9,
+                reg2: X10,
             },
             vec![0x20, 0x7D, 0x0A, 0x9B],
         );
@@ -1001,10 +975,10 @@ mod test {
     #[test]
     fn can_encode_div_reg_to_reg() {
         assert_encodes_as(
-            Aarch64Instruction::DivRegToReg {
-                destination: Register::X0,
-                reg1: Register::X9,
-                reg2: Register::X10,
+            DivRegToReg {
+                destination: X0,
+                reg1: X9,
+                reg2: X10,
             },
             vec![0x20, 0x0D, 0xCA, 0x9A],
         );
@@ -1012,36 +986,31 @@ mod test {
 
     #[test]
     fn can_encode_blr() {
-        assert_encodes_as(
-            Aarch64Instruction::Blr {
-                register: Register::X1,
-            },
-            vec![0x20, 0x00, 0x3F, 0xD6],
-        );
+        assert_encodes_as(Blr { register: X1 }, vec![0x20, 0x00, 0x3F, 0xD6]);
     }
 
     #[test]
     fn can_encode_str() {
         assert_encodes_as(
-            Aarch64Instruction::Str {
-                source: Register::X0,
-                base: Register::X0,
+            Str {
+                source: X0,
+                base: X0,
                 offset: 0,
             },
             vec![0x00, 0x00, 0x00, 0xF9],
         );
         assert_encodes_as(
-            Aarch64Instruction::Str {
-                source: Register::X1,
-                base: Register::X29,
+            Str {
+                source: X1,
+                base: X29,
                 offset: 0,
             },
             vec![0xA1, 0x03, 0x00, 0xF9],
         );
         assert_encodes_as(
-            Aarch64Instruction::Str {
-                source: Register::X4,
-                base: Register::X5,
+            Str {
+                source: X4,
+                base: X5,
                 offset: 32,
             },
             vec![0xA4, 0x10, 0x00, 0xF9],
@@ -1051,25 +1020,25 @@ mod test {
     #[test]
     fn can_encode_ldr() {
         assert_encodes_as(
-            Aarch64Instruction::Ldr {
-                destination: Register::X0,
-                base: Register::X0,
+            Ldr {
+                destination: X0,
+                base: X0,
                 offset: 0,
             },
             vec![0x00, 0x00, 0x40, 0xF9],
         );
         assert_encodes_as(
-            Aarch64Instruction::Ldr {
-                destination: Register::X1,
-                base: Register::X29,
+            Ldr {
+                destination: X1,
+                base: X29,
                 offset: 0,
             },
             vec![0xA1, 0x03, 0x40, 0xF9],
         );
         assert_encodes_as(
-            Aarch64Instruction::Ldr {
-                destination: Register::X4,
-                base: Register::X5,
+            Ldr {
+                destination: X4,
+                base: X5,
                 offset: 32,
             },
             vec![0xA4, 0x10, 0x40, 0xF9],
@@ -1079,60 +1048,60 @@ mod test {
     #[test]
     fn can_encode_stp() {
         assert_encodes_as(
-            Aarch64Instruction::Stp {
-                reg1: Register::X0,
-                reg2: Register::X0,
-                base: Register::X0,
+            Stp {
+                reg1: X0,
+                reg2: X0,
+                base: X0,
                 offset: 8,
                 pre_indexing: false,
             },
             vec![0x00, 0x80, 0x00, 0xA9],
         );
         assert_encodes_as(
-            Aarch64Instruction::Stp {
-                reg1: Register::X0,
-                reg2: Register::X0,
-                base: Register::X0,
+            Stp {
+                reg1: X0,
+                reg2: X0,
+                base: X0,
                 offset: -8,
                 pre_indexing: false,
             },
             vec![0x00, 0x80, 0x3F, 0xA9],
         );
         assert_encodes_as(
-            Aarch64Instruction::Stp {
-                reg1: Register::X2,
-                reg2: Register::X0,
-                base: Register::X0,
+            Stp {
+                reg1: X2,
+                reg2: X0,
+                base: X0,
                 offset: 0,
                 pre_indexing: false,
             },
             vec![0x02, 0x00, 0x00, 0xA9],
         );
         assert_encodes_as(
-            Aarch64Instruction::Stp {
-                reg1: Register::X0,
-                reg2: Register::X2,
-                base: Register::X0,
+            Stp {
+                reg1: X0,
+                reg2: X2,
+                base: X0,
                 offset: 0,
                 pre_indexing: false,
             },
             vec![0x00, 0x08, 0x00, 0xA9],
         );
         assert_encodes_as(
-            Aarch64Instruction::Stp {
-                reg1: Register::X0,
-                reg2: Register::X0,
-                base: Register::X2,
+            Stp {
+                reg1: X0,
+                reg2: X0,
+                base: X2,
                 offset: 0,
                 pre_indexing: false,
             },
             vec![0x40, 0x00, 0x00, 0xA9],
         );
         assert_encodes_as(
-            Aarch64Instruction::Stp {
-                reg1: Register::X29,
-                reg2: Register::X30,
-                base: Register::Sp,
+            Stp {
+                reg1: X29,
+                reg2: X30,
+                base: Sp,
                 offset: -16,
                 pre_indexing: false,
             },
@@ -1143,10 +1112,10 @@ mod test {
     #[test]
     fn can_encode_ldp() {
         assert_encodes_as(
-            Aarch64Instruction::Ldp {
-                reg1: Register::X29,
-                reg2: Register::X30,
-                base: Register::Sp,
+            Ldp {
+                reg1: X29,
+                reg2: X30,
+                base: Sp,
                 offset: 32,
             },
             vec![0xFD, 0x7B, 0xC2, 0xA8],
@@ -1156,9 +1125,9 @@ mod test {
     #[test]
     fn can_encode_neg() {
         assert_encodes_as(
-            Aarch64Instruction::Neg {
-                source: Register::X5,
-                destination: Register::X1,
+            Neg {
+                source: X5,
+                destination: X1,
             },
             vec![0xE1, 0x03, 0x05, 0xCB],
         );
@@ -1298,28 +1267,28 @@ mod test {
     proptest! {
         #[test]
         fn mov_immediate_uses_one_instruction_for_16bit_values(n in 0..0xFFFF) {
-            let instruction = Aarch64Instruction::MovImmToReg { register: Register::X0, value: n as i64 };
+            let instruction = MovImmToReg { register: X0, value: n as i64 };
             let machine_code = instruction.make_machine_code();
             assert_eq!(4, machine_code.len());
         }
 
         #[test]
         fn mov_immediate_uses_two_instructions_for_32bit_values(n in 0x10000..0xFFFFFFFFu32) {
-            let instruction = Aarch64Instruction::MovImmToReg { register: Register::X0, value: n as i64 };
+            let instruction = MovImmToReg { register: X0, value: n as i64 };
             let machine_code = instruction.make_machine_code();
             assert_eq!(8, machine_code.len());
         }
 
         #[test]
         fn mov_immediate_uses_three_instructions_for_48bit_values(n in 0x100000000..0xFFFFFFFFFFFFu64) {
-            let instruction = Aarch64Instruction::MovImmToReg { register: Register::X0, value: n as i64 };
+            let instruction = MovImmToReg { register: X0, value: n as i64 };
             let machine_code = instruction.make_machine_code();
             assert_eq!(12, machine_code.len());
         }
 
         #[test]
         fn mov_immediate_uses_four_instructions_for_64bit_values(n in 0x1000000000000..0xFFFFFFFFFFFFFFFFu64) {
-            let instruction = Aarch64Instruction::MovImmToReg { register: Register::X0, value: n as i64 };
+            let instruction = MovImmToReg { register: X0, value: n as i64 };
             let machine_code = instruction.make_machine_code();
             assert_eq!(16, machine_code.len());
         }
