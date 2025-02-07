@@ -54,6 +54,14 @@ impl fmt::Display for ArgumentIndex {
     }
 }
 
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum BinOpOperator {
+    Add,
+    Sub,
+    Mul,
+    Div,
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum IrInstruction {
     Mvi {
@@ -65,22 +73,8 @@ pub enum IrInstruction {
         arg: ArgumentIndex,
     },
 
-    Add {
-        dest: IrRegister,
-        op1: IrRegister,
-        op2: IrRegister,
-    },
-    Sub {
-        dest: IrRegister,
-        op1: IrRegister,
-        op2: IrRegister,
-    },
-    Mul {
-        dest: IrRegister,
-        op1: IrRegister,
-        op2: IrRegister,
-    },
-    Div {
+    BinOp {
+        operator: BinOpOperator,
         dest: IrRegister,
         op1: IrRegister,
         op2: IrRegister,
@@ -107,10 +101,12 @@ impl IrInstruction {
             IrInstruction::Mvi { dest, .. } => vec![*dest].into_iter(),
             IrInstruction::MvArg { dest, .. } => vec![*dest].into_iter(),
             IrInstruction::Neg { dest, op } => vec![*dest, *op].into_iter(),
-            IrInstruction::Add { dest, op1, op2 } => vec![*dest, *op1, *op2].into_iter(),
-            IrInstruction::Sub { dest, op1, op2 } => vec![*dest, *op1, *op2].into_iter(),
-            IrInstruction::Mul { dest, op1, op2 } => vec![*dest, *op1, *op2].into_iter(),
-            IrInstruction::Div { dest, op1, op2 } => vec![*dest, *op1, *op2].into_iter(),
+            IrInstruction::BinOp {
+                operator: _,
+                dest,
+                op1,
+                op2,
+            } => vec![*dest, *op1, *op2].into_iter(),
             IrInstruction::Ret { reg } => vec![*reg].into_iter(),
             IrInstruction::Call { dest, args, .. } => vec![*dest]
                 .into_iter()
@@ -136,17 +132,13 @@ impl fmt::Display for IrInstruction {
             IrInstruction::Mvi { dest, val } => write!(f, "mvi  @r{}, {}", dest, val),
             IrInstruction::MvArg { dest, arg } => write!(f, "mva  @r{}, a{}", dest, arg),
             IrInstruction::Neg { dest, op } => write!(f, "neg @r{}, r{}", dest, op),
-            IrInstruction::Add { dest, op1, op2 } => {
-                write!(f, "add  @r{}, r{}, r{}", dest, op1, op2)
-            }
-            IrInstruction::Sub { dest, op1, op2 } => {
-                write!(f, "sub  @r{}, r{}, r{}", dest, op1, op2)
-            }
-            IrInstruction::Mul { dest, op1, op2 } => {
-                write!(f, "mul  @r{}, r{}, r{}", dest, op1, op2)
-            }
-            IrInstruction::Div { dest, op1, op2 } => {
-                write!(f, "div  @r{}, r{}, r{}", dest, op1, op2)
+            IrInstruction::BinOp {
+                operator,
+                dest,
+                op1,
+                op2,
+            } => {
+                write!(f, "{:?}  @r{}, r{}, r{}", operator, dest, op1, op2)
             }
             IrInstruction::Ret { reg } => write!(f, "ret  r{}", reg),
             IrInstruction::Call {
@@ -208,7 +200,8 @@ pub mod builders {
     }
 
     pub fn add(dest: u32, op1: u32, op2: u32) -> IrInstruction {
-        IrInstruction::Add {
+        IrInstruction::BinOp {
+            operator: BinOpOperator::Add,
             dest: IrRegister::from_u32(dest),
             op1: IrRegister::from_u32(op1),
             op2: IrRegister::from_u32(op2),
@@ -216,7 +209,8 @@ pub mod builders {
     }
 
     pub fn sub(dest: u32, op1: u32, op2: u32) -> IrInstruction {
-        IrInstruction::Sub {
+        IrInstruction::BinOp {
+            operator: BinOpOperator::Sub,
             dest: IrRegister::from_u32(dest),
             op1: IrRegister::from_u32(op1),
             op2: IrRegister::from_u32(op2),
@@ -224,7 +218,8 @@ pub mod builders {
     }
 
     pub fn mul(dest: u32, op1: u32, op2: u32) -> IrInstruction {
-        IrInstruction::Mul {
+        IrInstruction::BinOp {
+            operator: BinOpOperator::Mul,
             dest: IrRegister::from_u32(dest),
             op1: IrRegister::from_u32(op1),
             op2: IrRegister::from_u32(op2),
@@ -232,7 +227,8 @@ pub mod builders {
     }
 
     pub fn div(dest: u32, op1: u32, op2: u32) -> IrInstruction {
-        IrInstruction::Div {
+        IrInstruction::BinOp {
+            operator: BinOpOperator::Div,
             dest: IrRegister::from_u32(dest),
             op1: IrRegister::from_u32(op1),
             op2: IrRegister::from_u32(op2),

@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use crate::{
     ast::{Block, BlockElement, Expression, Function, Program},
-    ir::{CompiledFunction, IrInstruction, IrRegister},
+    ir::{BinOpOperator, CompiledFunction, IrInstruction, IrRegister},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -336,28 +336,48 @@ impl<'input> FunctionCompiler {
                 let op1 = self.compile_expression(body, left, symbol_table.clone())?;
                 let op2 = self.compile_expression(body, right, symbol_table)?;
                 let dest = self.allocate_reg();
-                body.push(IrInstruction::Add { dest, op1, op2 });
+                body.push(IrInstruction::BinOp {
+                    operator: BinOpOperator::Add,
+                    dest,
+                    op1,
+                    op2,
+                });
                 Ok(dest)
             }
             Expression::Sub(left, right) => {
                 let op1 = self.compile_expression(body, left, symbol_table.clone())?;
                 let op2 = self.compile_expression(body, right, symbol_table)?;
                 let dest = self.allocate_reg();
-                body.push(IrInstruction::Sub { dest, op1, op2 });
+                body.push(IrInstruction::BinOp {
+                    operator: BinOpOperator::Sub,
+                    dest,
+                    op1,
+                    op2,
+                });
                 Ok(dest)
             }
             Expression::Mul(left, right) => {
                 let op1 = self.compile_expression(body, left, symbol_table.clone())?;
                 let op2 = self.compile_expression(body, right, symbol_table)?;
                 let dest = self.allocate_reg();
-                body.push(IrInstruction::Mul { dest, op1, op2 });
+                body.push(IrInstruction::BinOp {
+                    operator: BinOpOperator::Mul,
+                    dest,
+                    op1,
+                    op2,
+                });
                 Ok(dest)
             }
             Expression::Div(left, right) => {
                 let op1 = self.compile_expression(body, left, symbol_table.clone())?;
                 let op2 = self.compile_expression(body, right, symbol_table)?;
                 let dest = self.allocate_reg();
-                body.push(IrInstruction::Div { dest, op1, op2 });
+                body.push(IrInstruction::BinOp {
+                    operator: BinOpOperator::Div,
+                    dest,
+                    op1,
+                    op2,
+                });
                 Ok(dest)
             }
         }

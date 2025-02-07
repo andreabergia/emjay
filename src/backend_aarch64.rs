@@ -6,7 +6,7 @@ use std::{
 use crate::{
     backend::{BackendError, CompiledFunctionCatalog, GeneratedMachineCode, MachineCodeGenerator},
     backend_register_allocator::{self, AllocatedLocation},
-    ir::{ArgumentIndex, CompiledFunction, IrInstruction, IrRegister},
+    ir::{ArgumentIndex, BinOpOperator, CompiledFunction, IrInstruction},
     jit::jit_call_trampoline,
 };
 
@@ -581,60 +581,57 @@ impl MachineCodeGenerator for Aarch64Generator {
                     });
                 }
 
-                IrInstruction::Add { dest, op1, op2 } => {
-                    self.do_binop(
-                        &mut instructions,
-                        *dest,
-                        *op1,
-                        *op2,
-                        |destination, reg1, reg2| Aarch64Instruction::AddRegToReg {
-                            destination,
-                            reg1,
-                            reg2,
-                        },
-                    )?;
-                }
+                IrInstruction::BinOp {
+                    operator,
+                    dest,
+                    op1,
+                    op2,
+                } => {
+                    let op1: usize = (*op1).into();
+                    let op2: usize = (*op2).into();
+                    let dest: usize = (*dest).into();
 
-                IrInstruction::Sub { dest, op1, op2 } => {
-                    self.do_binop(
-                        &mut instructions,
-                        *dest,
-                        *op1,
-                        *op2,
-                        |destination, reg1, reg2| Aarch64Instruction::SubRegToReg {
-                            destination,
-                            reg1,
-                            reg2,
-                        },
-                    )?;
-                }
+                    let AllocatedLocation::Register { register: reg1 } = self.locations[op1] else {
+                        return Err(BackendError::NotImplemented(
+                            "binop when one operand is in stack".to_string(),
+                        ));
+                    };
+                    let AllocatedLocation::Register { register: reg2 } = self.locations[op2] else {
+                        return Err(BackendError::NotImplemented(
+                            "binop when one operand is in stack".to_string(),
+                        ));
+                    };
+                    let AllocatedLocation::Register {
+                        register: destination,
+                    } = self.locations[dest]
+                    else {
+                        return Err(BackendError::NotImplemented(
+                            "binop when destination is in stack".to_string(),
+                        ));
+                    };
 
-                IrInstruction::Mul { dest, op1, op2 } => {
-                    self.do_binop(
-                        &mut instructions,
-                        *dest,
-                        *op1,
-                        *op2,
-                        |destination, reg1, reg2| Aarch64Instruction::MulRegToReg {
+                    instructions.push(match operator {
+                        BinOpOperator::Add => Aarch64Instruction::AddRegToReg {
                             destination,
                             reg1,
                             reg2,
                         },
-                    )?;
-                }
-
-                IrInstruction::Div { dest, op1, op2 } => {
-                    self.do_binop(
-                        &mut instructions,
-                        *dest,
-                        *op1,
-                        *op2,
-                        |destination, reg1, reg2| Aarch64Instruction::DivRegToReg {
+                        BinOpOperator::Sub => Aarch64Instruction::SubRegToReg {
                             destination,
                             reg1,
                             reg2,
                         },
-                    )?;
+                        BinOpOperator::Mul => Aarch64Instruction::MulRegToReg {
+                            destination,
+                            reg1,
+                            reg2,
+                        },
+                        BinOpOperator::Div => Aarch64Instruction::DivRegToReg {
+                            destination,
+                            reg1,
+                            reg2,
+                        },
+                    });
                 }
 
                 IrInstruction::Call {
@@ -824,38 +821,6 @@ impl Aarch64Generator {
                 }
             }
         }
-        Ok(())
-    }
-
-    fn do_binop(
-        &self,
-        instructions: &mut Vec<Aarch64Instruction>,
-        dest: IrRegister,
-        op1: IrRegister,
-        op2: IrRegister,
-        callback: impl Fn(Register, Register, Register) -> Aarch64Instruction,
-    ) -> Result<(), BackendError> {
-        let op1: usize = op1.into();
-        let op2: usize = op2.into();
-        let dest: usize = dest.into();
-
-        let AllocatedLocation::Register { register: reg1 } = self.locations[op1] else {
-            return Err(BackendError::NotImplemented(
-                "binop when one operand is in stack".to_string(),
-            ));
-        };
-        let AllocatedLocation::Register { register: reg2 } = self.locations[op2] else {
-            return Err(BackendError::NotImplemented(
-                "binop when one operand is in stack".to_string(),
-            ));
-        };
-        let AllocatedLocation::Register { register: dest } = self.locations[dest] else {
-            return Err(BackendError::NotImplemented(
-                "binop when destination is in stack".to_string(),
-            ));
-        };
-
-        instructions.push(callback(dest, reg1, reg2));
         Ok(())
     }
 

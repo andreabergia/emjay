@@ -201,76 +201,87 @@ impl MachineCodeGenerator for X64LinuxGenerator {
                     instructions.push(X64Instruction::Retn);
                 }
 
-                IrInstruction::Add { dest, op1, op2 } => self.do_bin_op(
-                    &mut instructions,
+                IrInstruction::BinOp {
+                    operator,
+                    dest,
                     op1,
                     op2,
-                    dest,
-                    |instructions, register| {
-                        instructions.push(X64Instruction::AddRegToRax { register })
-                    },
-                )?,
-                IrInstruction::Sub { dest, op1, op2 } => self.do_bin_op(
-                    &mut instructions,
-                    op1,
-                    op2,
-                    dest,
-                    |instructions, register| {
-                        instructions.push(X64Instruction::SubRegFromRax { register })
-                    },
-                )?,
-                IrInstruction::Mul { dest, op1, op2 } => self.do_bin_op(
-                    &mut instructions,
-                    op1,
-                    op2,
-                    dest,
-                    |instructions, register| {
-                        instructions.push(X64Instruction::MulRegToRax { register })
-                    },
-                )?,
-                IrInstruction::Div { dest, op1, op2 } => self.do_bin_op(
-                    &mut instructions,
-                    op1,
-                    op2,
-                    dest,
-                    |instructions, register| {
-                        // DIV is different from most other instructions: it will forcibly
-                        // divide rdx:rax by the given register. For the accumulator we
-                        // are fine, but we need to set rdx to zero, and to do so we backup
-                        // its value. Furthermore, we might have that the divisor is actually
-                        // in rdx. In that case, we move the divisor to r11 (which we know we
-                        // have never allocated) and use `div r11`.
-                        if register == Register::Rdx {
+                } => {
+                    self.move_to_accumulator(op1, &mut instructions)?;
+
+                    let op2: usize = (*op2).into();
+                    match self.locations[op2] {
+                        AllocatedLocation::Stack { .. } => {
+                            return Err(BackendError::NotImplemented(
+                                "binop when operand 2 is on the stack".to_string(),
+                            ))
+                        }
+                        AllocatedLocation::Register { register } => match operator {
+                            crate::ir::BinOpOperator::Add => {
+                                instructions.push(X64Instruction::AddRegToRax { register })
+                            }
+                            crate::ir::BinOpOperator::Sub => {
+                                instructions.push(X64Instruction::SubRegFromRax { register })
+                            }
+                            crate::ir::BinOpOperator::Mul => {
+                                instructions.push(X64Instruction::MulRegToRax { register })
+                            }
+                            crate::ir::BinOpOperator::Div => {
+                                // DIV is different from most other instructions: it will forcibly
+                                // divide rdx:rax by the given register. For the accumulator we
+                                // are fine, but we need to set rdx to zero, and to do so we backup
+                                // its value. Furthermore, we might have that the divisor is actually
+                                // in rdx. In that case, we move the divisor to r11 (which we know we
+                                // have never allocated) and use `div r11`.
+                                if register == Register::Rdx {
+                                    instructions.push(X64Instruction::MovRegToReg {
+                                        source: Register::Rdx,
+                                        destination: Register::R11,
+                                    });
+                                    instructions.push(X64Instruction::MovImmToReg {
+                                        register: Register::Rdx,
+                                        value: 0,
+                                    });
+                                    instructions.push(X64Instruction::DivRegFromRax {
+                                        register: Register::R11,
+                                    });
+                                    instructions.push(X64Instruction::MovRegToReg {
+                                        source: Register::R11,
+                                        destination: Register::Rdx,
+                                    });
+                                } else {
+                                    instructions.push(X64Instruction::Push {
+                                        register: Register::Rdx,
+                                    });
+                                    instructions.push(X64Instruction::MovImmToReg {
+                                        register: Register::Rdx,
+                                        value: 0,
+                                    });
+                                    instructions.push(X64Instruction::DivRegFromRax { register });
+                                    instructions.push(X64Instruction::Pop {
+                                        register: Register::Rdx,
+                                    });
+                                }
+                            }
+                        },
+                    }
+
+                    let dest: usize = (*dest).into();
+                    match self.locations[dest] {
+                        AllocatedLocation::Register { register } => {
                             instructions.push(X64Instruction::MovRegToReg {
-                                source: Register::Rdx,
-                                destination: Register::R11,
-                            });
-                            instructions.push(X64Instruction::MovImmToReg {
-                                register: Register::Rdx,
-                                value: 0,
-                            });
-                            instructions.push(X64Instruction::DivRegFromRax {
-                                register: Register::R11,
-                            });
-                            instructions.push(X64Instruction::MovRegToReg {
-                                source: Register::R11,
-                                destination: Register::Rdx,
-                            });
-                        } else {
-                            instructions.push(X64Instruction::Push {
-                                register: Register::Rdx,
-                            });
-                            instructions.push(X64Instruction::MovImmToReg {
-                                register: Register::Rdx,
-                                value: 0,
-                            });
-                            instructions.push(X64Instruction::DivRegFromRax { register });
-                            instructions.push(X64Instruction::Pop {
-                                register: Register::Rdx,
+                                source: Register::Rax,
+                                destination: register,
                             });
                         }
-                    },
-                )?,
+                        AllocatedLocation::Stack { .. } => {
+                            return Err(BackendError::NotImplemented(
+                                "binop when destination is on the stack".to_string(),
+                            ));
+                        }
+                    }
+                }
+
                 IrInstruction::MvArg { .. } => {
                     return Err(BackendError::NotImplemented(
                         "accessing function arguments".to_string(),
@@ -323,41 +334,6 @@ impl X64LinuxGenerator {
             }
             AllocatedLocation::Stack { .. } => Err(BackendError::NotImplemented(
                 "move to accumulator from stack".to_string(),
-            )),
-        }
-    }
-
-    fn do_bin_op(
-        &mut self,
-        instructions: &mut Vec<X64Instruction>,
-        op1: &IrRegister,
-        op2: &IrRegister,
-        dest: &IrRegister,
-        lambda: impl Fn(&mut Vec<X64Instruction>, Register),
-    ) -> Result<(), BackendError> {
-        self.move_to_accumulator(op1, instructions)?;
-
-        let op2: usize = (*op2).into();
-        match self.locations[op2] {
-            AllocatedLocation::Stack { .. } => {
-                return Err(BackendError::NotImplemented(
-                    "binop when operand 2 is on the stack".to_string(),
-                ))
-            }
-            AllocatedLocation::Register { register } => lambda(instructions, register),
-        }
-
-        let dest: usize = (*dest).into();
-        match self.locations[dest] {
-            AllocatedLocation::Register { register } => {
-                instructions.push(X64Instruction::MovRegToReg {
-                    source: Register::Rax,
-                    destination: register,
-                });
-                Ok(())
-            }
-            AllocatedLocation::Stack { .. } => Err(BackendError::NotImplemented(
-                "binop when destination is on the stack".to_string(),
             )),
         }
     }

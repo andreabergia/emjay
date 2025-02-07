@@ -32,37 +32,16 @@ fn deduplicate_constants(
         IrInstruction::MvArg { .. } => {
             result.push(instruction.clone());
         }
-        IrInstruction::Add { dest, op1, op2 } => {
+        IrInstruction::BinOp {
+            operator,
+            dest,
+            op1,
+            op2,
+        } => {
             let op1: usize = (*op1).into();
             let op2: usize = (*op2).into();
-            result.push(IrInstruction::Add {
-                dest: *dest,
-                op1: register_replacement[op1],
-                op2: register_replacement[op2],
-            })
-        }
-        IrInstruction::Sub { dest, op1, op2 } => {
-            let op1: usize = (*op1).into();
-            let op2: usize = (*op2).into();
-            result.push(IrInstruction::Sub {
-                dest: *dest,
-                op1: register_replacement[op1],
-                op2: register_replacement[op2],
-            })
-        }
-        IrInstruction::Mul { dest, op1, op2 } => {
-            let op1: usize = (*op1).into();
-            let op2: usize = (*op2).into();
-            result.push(IrInstruction::Mul {
-                dest: *dest,
-                op1: register_replacement[op1],
-                op2: register_replacement[op2],
-            })
-        }
-        IrInstruction::Div { dest, op1, op2 } => {
-            let op1: usize = (*op1).into();
-            let op2: usize = (*op2).into();
-            result.push(IrInstruction::Div {
+            result.push(IrInstruction::BinOp {
+                operator: *operator,
                 dest: *dest,
                 op1: register_replacement[op1],
                 op2: register_replacement[op2],
@@ -131,37 +110,12 @@ fn dead_store_elimination(
                     result.push(instruction);
                 }
             }
-            IrInstruction::Add { dest, op1, op2 } => {
-                let dest: usize = dest.into();
-                if used_registers[dest] {
-                    let op1: usize = op1.into();
-                    let op2: usize = op2.into();
-                    used_registers[op1] = true;
-                    used_registers[op2] = true;
-                    result.push(instruction);
-                }
-            }
-            IrInstruction::Sub { dest, op1, op2 } => {
-                let dest: usize = dest.into();
-                if used_registers[dest] {
-                    let op1: usize = op1.into();
-                    let op2: usize = op2.into();
-                    used_registers[op1] = true;
-                    used_registers[op2] = true;
-                    result.push(instruction);
-                }
-            }
-            IrInstruction::Mul { dest, op1, op2 } => {
-                let dest: usize = dest.into();
-                if used_registers[dest] {
-                    let op1: usize = op1.into();
-                    let op2: usize = op2.into();
-                    used_registers[op1] = true;
-                    used_registers[op2] = true;
-                    result.push(instruction);
-                }
-            }
-            IrInstruction::Div { dest, op1, op2 } => {
+            IrInstruction::BinOp {
+                dest,
+                op1,
+                op2,
+                operator: _,
+            } => {
                 let dest: usize = dest.into();
                 if used_registers[dest] {
                     let op1: usize = op1.into();
@@ -247,84 +201,28 @@ fn rename_registers(body: Vec<IrInstruction>, num_used_registers: usize) -> Repl
                 }
                 next_expected_register += 1;
             }
-            IrInstruction::Add { dest, op1, op2 } => {
+            IrInstruction::BinOp {
+                operator,
+                dest,
+                op1,
+                op2,
+            } => {
                 dbg!(&register_replacement);
                 dbg!(&register_replacement);
                 let dest_usize: usize = dest.into();
                 let op1: usize = op1.into();
                 let op2: usize = op2.into();
                 if next_expected_register == dest_usize {
-                    result.push(IrInstruction::Add {
+                    result.push(IrInstruction::BinOp {
+                        operator,
                         dest,
                         op1: register_replacement[op1],
                         op2: register_replacement[op2],
                     });
                 } else {
                     let replaced_register = IrRegister::from_u32(next_expected_register as u32);
-                    result.push(IrInstruction::Add {
-                        dest: replaced_register,
-                        op1: register_replacement[op1],
-                        op2: register_replacement[op2],
-                    });
-                    register_replacement[dest_usize] = replaced_register;
-                }
-                next_expected_register += 1;
-            }
-            IrInstruction::Sub { dest, op1, op2 } => {
-                let dest_usize: usize = dest.into();
-                let op1: usize = op1.into();
-                let op2: usize = op2.into();
-                if next_expected_register == dest_usize {
-                    result.push(IrInstruction::Sub {
-                        dest,
-                        op1: register_replacement[op1],
-                        op2: register_replacement[op2],
-                    });
-                } else {
-                    let replaced_register = IrRegister::from_u32(next_expected_register as u32);
-                    result.push(IrInstruction::Sub {
-                        dest: replaced_register,
-                        op1: register_replacement[op1],
-                        op2: register_replacement[op2],
-                    });
-                    register_replacement[dest_usize] = replaced_register;
-                }
-                next_expected_register += 1;
-            }
-            IrInstruction::Mul { dest, op1, op2 } => {
-                let dest_usize: usize = dest.into();
-                let op1: usize = op1.into();
-                let op2: usize = op2.into();
-                if next_expected_register == dest_usize {
-                    result.push(IrInstruction::Mul {
-                        dest,
-                        op1: register_replacement[op1],
-                        op2: register_replacement[op2],
-                    });
-                } else {
-                    let replaced_register = IrRegister::from_u32(next_expected_register as u32);
-                    result.push(IrInstruction::Mul {
-                        dest: replaced_register,
-                        op1: register_replacement[op1],
-                        op2: register_replacement[op2],
-                    });
-                    register_replacement[dest_usize] = replaced_register;
-                }
-                next_expected_register += 1;
-            }
-            IrInstruction::Div { dest, op1, op2 } => {
-                let dest_usize: usize = dest.into();
-                let op1: usize = op1.into();
-                let op2: usize = op2.into();
-                if next_expected_register == dest_usize {
-                    result.push(IrInstruction::Div {
-                        dest,
-                        op1: register_replacement[op1],
-                        op2: register_replacement[op2],
-                    });
-                } else {
-                    let replaced_register = IrRegister::from_u32(next_expected_register as u32);
-                    result.push(IrInstruction::Div {
+                    result.push(IrInstruction::BinOp {
+                        operator,
                         dest: replaced_register,
                         op1: register_replacement[op1],
                         op2: register_replacement[op2],
