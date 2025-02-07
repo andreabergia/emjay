@@ -3,30 +3,22 @@ use core::fmt;
 use crate::frontend::FunctionId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]
-pub struct IrRegister {
-    value: u32,
-}
-
-impl From<IrRegister> for usize {
-    fn from(value: IrRegister) -> Self {
-        value.value as usize
-    }
-}
+pub struct IrRegister(pub usize);
 
 impl fmt::Display for IrRegister {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.value)
+        write!(f, "{}", self.0)
     }
 }
 
 impl IrRegister {
-    pub const fn from_u32(value: u32) -> Self {
-        IrRegister { value }
+    pub const fn new(value: usize) -> Self {
+        IrRegister(value)
     }
 
     pub fn inc(&mut self) -> Self {
         let prev = *self;
-        self.value += 1;
+        self.0 += 1;
         prev
     }
 }
@@ -178,75 +170,75 @@ impl fmt::Display for CompiledFunction<'_> {
 pub mod builders {
     use super::*;
 
-    pub fn mvi(dest: u32, val: i64) -> IrInstruction {
+    pub fn mvi(dest: usize, val: i64) -> IrInstruction {
         IrInstruction::Mvi {
-            dest: IrRegister::from_u32(dest),
+            dest: IrRegister::new(dest),
             val,
         }
     }
 
-    pub fn mvarg(dest: u32, arg: usize) -> IrInstruction {
+    pub fn mvarg(dest: usize, arg: usize) -> IrInstruction {
         IrInstruction::MvArg {
-            dest: IrRegister::from_u32(dest),
+            dest: IrRegister::new(dest),
             arg: ArgumentIndex::from(arg),
         }
     }
 
-    pub fn neg(dest: u32, op: u32) -> IrInstruction {
+    pub fn neg(dest: usize, op: usize) -> IrInstruction {
         IrInstruction::Neg {
-            dest: IrRegister::from_u32(dest),
-            op: IrRegister::from_u32(op),
+            dest: IrRegister::new(dest),
+            op: IrRegister::new(op),
         }
     }
 
-    pub fn add(dest: u32, op1: u32, op2: u32) -> IrInstruction {
+    pub fn add(dest: usize, op1: usize, op2: usize) -> IrInstruction {
         IrInstruction::BinOp {
             operator: BinOpOperator::Add,
-            dest: IrRegister::from_u32(dest),
-            op1: IrRegister::from_u32(op1),
-            op2: IrRegister::from_u32(op2),
+            dest: IrRegister::new(dest),
+            op1: IrRegister::new(op1),
+            op2: IrRegister::new(op2),
         }
     }
 
-    pub fn sub(dest: u32, op1: u32, op2: u32) -> IrInstruction {
+    pub fn sub(dest: usize, op1: usize, op2: usize) -> IrInstruction {
         IrInstruction::BinOp {
             operator: BinOpOperator::Sub,
-            dest: IrRegister::from_u32(dest),
-            op1: IrRegister::from_u32(op1),
-            op2: IrRegister::from_u32(op2),
+            dest: IrRegister::new(dest),
+            op1: IrRegister::new(op1),
+            op2: IrRegister::new(op2),
         }
     }
 
-    pub fn mul(dest: u32, op1: u32, op2: u32) -> IrInstruction {
+    pub fn mul(dest: usize, op1: usize, op2: usize) -> IrInstruction {
         IrInstruction::BinOp {
             operator: BinOpOperator::Mul,
-            dest: IrRegister::from_u32(dest),
-            op1: IrRegister::from_u32(op1),
-            op2: IrRegister::from_u32(op2),
+            dest: IrRegister::new(dest),
+            op1: IrRegister::new(op1),
+            op2: IrRegister::new(op2),
         }
     }
 
-    pub fn div(dest: u32, op1: u32, op2: u32) -> IrInstruction {
+    pub fn div(dest: usize, op1: usize, op2: usize) -> IrInstruction {
         IrInstruction::BinOp {
             operator: BinOpOperator::Div,
-            dest: IrRegister::from_u32(dest),
-            op1: IrRegister::from_u32(op1),
-            op2: IrRegister::from_u32(op2),
+            dest: IrRegister::new(dest),
+            op1: IrRegister::new(op1),
+            op2: IrRegister::new(op2),
         }
     }
 
-    pub fn ret(reg: u32) -> IrInstruction {
+    pub fn ret(reg: usize) -> IrInstruction {
         IrInstruction::Ret {
-            reg: IrRegister::from_u32(reg),
+            reg: IrRegister::new(reg),
         }
     }
 
-    pub fn call(dest: u32, name: &str, id: usize, args: Vec<u32>) -> IrInstruction {
+    pub fn call(dest: usize, name: &str, id: usize, args: Vec<usize>) -> IrInstruction {
         IrInstruction::Call {
-            dest: IrRegister::from_u32(dest),
+            dest: IrRegister::new(dest),
             function_id: FunctionId(id),
             name: name.to_string(),
-            args: args.into_iter().map(IrRegister::from_u32).collect(),
+            args: args.into_iter().map(IrRegister::new).collect(),
         }
     }
 }

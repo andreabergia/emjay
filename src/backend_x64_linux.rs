@@ -179,8 +179,7 @@ impl MachineCodeGenerator for X64LinuxGenerator {
         for instruction in function.body.iter() {
             match instruction {
                 IrInstruction::Mvi { dest, val } => {
-                    let dest: usize = (*dest).into();
-                    let AllocatedLocation::Register { register } = self.locations[dest] else {
+                    let AllocatedLocation::Register { register } = self.locations[dest.0] else {
                         return Err(BackendError::NotImplemented(
                             "move immediate to stack".to_string(),
                         ));
@@ -207,8 +206,7 @@ impl MachineCodeGenerator for X64LinuxGenerator {
                 } => {
                     self.move_to_accumulator(op1, &mut instructions)?;
 
-                    let op2: usize = (*op2).into();
-                    match self.locations[op2] {
+                    match self.locations[op2.0] {
                         AllocatedLocation::Stack { .. } => {
                             return Err(BackendError::NotImplemented(
                                 "binop when operand 2 is on the stack".to_string(),
@@ -252,8 +250,7 @@ impl MachineCodeGenerator for X64LinuxGenerator {
                         },
                     }
 
-                    let dest: usize = (*dest).into();
-                    match self.locations[dest] {
+                    match self.locations[dest.0] {
                         AllocatedLocation::Register { register } => {
                             instructions.push(MovRegToReg {
                                 source: Rax,
@@ -306,8 +303,7 @@ impl X64LinuxGenerator {
         reg: &IrRegister,
         instructions: &mut Vec<X64Instruction>,
     ) -> Result<(), BackendError> {
-        let reg: usize = (*reg).into();
-        match self.locations[reg] {
+        match self.locations[reg.0] {
             AllocatedLocation::Register { register } => {
                 instructions.push(MovRegToReg {
                     source: register,

@@ -166,7 +166,7 @@ impl<'input> FunctionCompiler {
             name: function.name,
             id,
             num_args: function.args.len(),
-            num_used_registers: usize::from(self.next_free_reg),
+            num_used_registers: self.next_free_reg.0,
             body,
         })
     }

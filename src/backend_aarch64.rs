@@ -497,8 +497,7 @@ impl MachineCodeGenerator for Aarch64Generator {
         for instruction in function.body.iter() {
             match instruction {
                 IrInstruction::Mvi { dest, val } => {
-                    let dest: usize = (*dest).into();
-                    let AllocatedLocation::Register { register } = self.locations[dest] else {
+                    let AllocatedLocation::Register { register } = self.locations[dest.0] else {
                         return Err(BackendError::NotImplemented(
                             "move immediate to stack".to_string(),
                         ));
@@ -518,10 +517,9 @@ impl MachineCodeGenerator for Aarch64Generator {
                         ));
                     };
 
-                    let dest: usize = (*dest).into();
                     let AllocatedLocation::Register {
                         register: destination,
-                    } = self.locations[dest]
+                    } = self.locations[dest.0]
                     else {
                         return Err(BackendError::NotImplemented(
                             "move argument to stack".to_string(),
@@ -535,8 +533,7 @@ impl MachineCodeGenerator for Aarch64Generator {
                 }
 
                 IrInstruction::Ret { reg } => {
-                    let reg: usize = (*reg).into();
-                    let AllocatedLocation::Register { register: source } = self.locations[reg]
+                    let AllocatedLocation::Register { register: source } = self.locations[reg.0]
                     else {
                         return Err(BackendError::NotImplemented(
                             "return value from stack".to_string(),
@@ -557,18 +554,16 @@ impl MachineCodeGenerator for Aarch64Generator {
                 }
 
                 IrInstruction::Neg { dest, op } => {
-                    let op: usize = (*op).into();
-                    let AllocatedLocation::Register { register: source } = self.locations[op]
+                    let AllocatedLocation::Register { register: source } = self.locations[op.0]
                     else {
                         return Err(BackendError::NotImplemented(
                             "negate stack value".to_string(),
                         ));
                     };
 
-                    let dest: usize = (*dest).into();
                     let AllocatedLocation::Register {
                         register: destination,
-                    } = self.locations[dest]
+                    } = self.locations[dest.0]
                     else {
                         return Err(BackendError::NotImplemented(
                             "store negation to stack value".to_string(),
@@ -587,23 +582,21 @@ impl MachineCodeGenerator for Aarch64Generator {
                     op1,
                     op2,
                 } => {
-                    let op1: usize = (*op1).into();
-                    let op2: usize = (*op2).into();
-                    let dest: usize = (*dest).into();
-
-                    let AllocatedLocation::Register { register: reg1 } = self.locations[op1] else {
+                    let AllocatedLocation::Register { register: reg1 } = self.locations[op1.0]
+                    else {
                         return Err(BackendError::NotImplemented(
                             "binop when one operand is in stack".to_string(),
                         ));
                     };
-                    let AllocatedLocation::Register { register: reg2 } = self.locations[op2] else {
+                    let AllocatedLocation::Register { register: reg2 } = self.locations[op2.0]
+                    else {
                         return Err(BackendError::NotImplemented(
                             "binop when one operand is in stack".to_string(),
                         ));
                     };
                     let AllocatedLocation::Register {
                         register: destination,
-                    } = self.locations[dest]
+                    } = self.locations[dest.0]
                     else {
                         return Err(BackendError::NotImplemented(
                             "binop when destination is in stack".to_string(),
@@ -640,8 +633,6 @@ impl MachineCodeGenerator for Aarch64Generator {
                     function_id: called_function_id,
                     args: call_args,
                 } => {
-                    let dest: usize = (*dest).into();
-
                     let fn_catalog_addr: usize =
                         function_catalog as *const CompiledFunctionCatalog as usize;
                     let jit_call_trampoline_address: usize = jit_call_trampoline as usize;
@@ -678,10 +669,9 @@ impl MachineCodeGenerator for Aarch64Generator {
                     // Fill arguments
                     for (call_arg, actual_arg) in call_args.iter().enumerate() {
                         let shifted_call_arg = call_arg + 2; // X0 and X1 are already used
-                        let actual_arg: usize = (*actual_arg).into();
                         let AllocatedLocation::Register {
                             register: actual_arg_register,
-                        } = self.locations[actual_arg]
+                        } = self.locations[actual_arg.0]
                         else {
                             return Err(BackendError::NotImplemented(
                                 "passing arguments to function from stack".to_string(),
@@ -725,7 +715,7 @@ impl MachineCodeGenerator for Aarch64Generator {
                     // Copy result (x0) to the opportune register
                     let AllocatedLocation::Register {
                         register: destination,
-                    } = self.locations[dest]
+                    } = self.locations[dest.0]
                     else {
                         return Err(BackendError::NotImplemented(
                             "move register to stack".to_string(),

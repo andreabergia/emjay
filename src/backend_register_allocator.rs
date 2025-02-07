@@ -21,7 +21,7 @@ fn compute_ir_reg_used_at(function: &CompiledFunction) -> Vec<VecDeque<ProgramCo
     for (pc, instruction) in function.body.iter().enumerate() {
         let pc = ProgramCounter(pc);
         for ir_reg in instruction.operands() {
-            ir_reg_used_at[usize::from(ir_reg)].push_back(pc);
+            ir_reg_used_at[ir_reg.0].push_back(pc);
         }
     }
 
@@ -56,19 +56,18 @@ fn allocate_ir_regs_to_logical_hw_regs(
     // Key: logical_hw_reg, value: ir_reg
     let mut logical_hw_regs_content: Vec<IrRegister> = Vec::new();
 
-    const FREE: IrRegister = IrRegister::from_u32(u32::MAX);
+    const FREE: IrRegister = IrRegister::new(usize::MAX);
     let mut free_logical_hw_registers: Vec<LogicalHwRegister> = Vec::new();
 
     for (pc, instruction) in function.body.iter().enumerate() {
         let pc = ProgramCounter(pc);
         debug!("  pc {:2}:  {}", pc.0, instruction);
         for ir_reg in instruction.operands() {
-            if ir_reg_allocation[usize::from(ir_reg)] != NOT_ALLOCATED {
+            if ir_reg_allocation[ir_reg.0] != NOT_ALLOCATED {
                 // Already allocated
                 debug!(
                     "    register {} already allocated to hw reg {}",
-                    ir_reg,
-                    ir_reg_allocation[usize::from(ir_reg)]
+                    ir_reg, ir_reg_allocation[ir_reg.0]
                 );
             } else if free_logical_hw_registers.is_empty() {
                 // Requires a new logical hw register
@@ -77,7 +76,7 @@ fn allocate_ir_regs_to_logical_hw_regs(
                     "    register {} allocating to new hw reg {:?}",
                     ir_reg, new_logical_hw_reg
                 );
-                ir_reg_allocation[usize::from(ir_reg)] = new_logical_hw_reg;
+                ir_reg_allocation[ir_reg.0] = new_logical_hw_reg;
                 logical_hw_regs_content.push(ir_reg);
             } else {
                 // We can reuse something free
@@ -86,7 +85,7 @@ fn allocate_ir_regs_to_logical_hw_regs(
                     "    register {} allocating to existing but free hw reg {}",
                     ir_reg, first_free_reg
                 );
-                ir_reg_allocation[usize::from(ir_reg)] = first_free_reg;
+                ir_reg_allocation[ir_reg.0] = first_free_reg;
                 logical_hw_regs_content[first_free_reg.0] = ir_reg;
             }
         }
@@ -94,7 +93,7 @@ fn allocate_ir_regs_to_logical_hw_regs(
         // Can we free something?
         for (hw_reg, ir_reg) in logical_hw_regs_content.iter_mut().enumerate() {
             if *ir_reg != FREE {
-                let ir_reg_used_at_pcs = &mut ir_reg_used_at[usize::from(*ir_reg)];
+                let ir_reg_used_at_pcs = &mut ir_reg_used_at[ir_reg.0];
                 if !ir_reg_used_at_pcs.is_empty() && ir_reg_used_at_pcs[0] == pc {
                     ir_reg_used_at_pcs.pop_front();
                 }

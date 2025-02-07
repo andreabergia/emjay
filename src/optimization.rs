@@ -11,7 +11,7 @@ fn deduplicate_constants(
     // By default, each register maps to itself
     let mut register_replacement: Vec<IrRegister> = Vec::with_capacity(num_used_registers);
     for i in 0..num_used_registers {
-        register_replacement.push(IrRegister::from_u32(i as u32));
+        register_replacement.push(IrRegister::new(i));
     }
 
     let mut constant_values: HashMap<i64, IrRegister> = HashMap::new();
@@ -19,11 +19,10 @@ fn deduplicate_constants(
     let mut result = Vec::new();
     body.into_iter().for_each(|instruction| match instruction {
         IrInstruction::Mvi { dest, val } => {
-            let dest_usize: usize = dest.into();
             let register_containing_value = constant_values.get(&val);
             if let Some(register_containing_value) = register_containing_value {
                 // Replace register with cached version in successive instructions, and skip it
-                register_replacement[dest_usize] = *register_containing_value;
+                register_replacement[dest.0] = *register_containing_value;
             } else {
                 constant_values.insert(val, dest);
                 result.push(instruction.clone());
@@ -37,42 +36,26 @@ fn deduplicate_constants(
             dest,
             op1,
             op2,
-        } => {
-            let op1: usize = op1.into();
-            let op2: usize = op2.into();
-            result.push(IrInstruction::BinOp {
-                operator,
-                dest,
-                op1: register_replacement[op1],
-                op2: register_replacement[op2],
-            })
-        }
-        IrInstruction::Neg { dest, op } => {
-            let op: usize = op.into();
-            result.push(IrInstruction::Neg {
-                dest,
-                op: register_replacement[op],
-            })
-        }
-        IrInstruction::Ret { reg } => {
-            let reg: usize = reg.into();
-            result.push(IrInstruction::Ret {
-                reg: register_replacement[reg],
-            })
-        }
+        } => result.push(IrInstruction::BinOp {
+            operator,
+            dest,
+            op1: register_replacement[op1.0],
+            op2: register_replacement[op2.0],
+        }),
+        IrInstruction::Neg { dest, op } => result.push(IrInstruction::Neg {
+            dest,
+            op: register_replacement[op.0],
+        }),
+        IrInstruction::Ret { reg } => result.push(IrInstruction::Ret {
+            reg: register_replacement[reg.0],
+        }),
         IrInstruction::Call {
             dest,
             name,
             function_id,
             args,
         } => {
-            let args = args
-                .iter()
-                .map(|arg| {
-                    let arg: usize = (*arg).into();
-                    register_replacement[arg]
-                })
-                .collect();
+            let args = args.iter().map(|arg| register_replacement[arg.0]).collect();
             result.push(IrInstruction::Call {
                 dest,
                 name: name.clone(),
@@ -94,19 +77,16 @@ fn dead_store_elimination(
     for instruction in body.into_iter().rev() {
         match instruction {
             IrInstruction::Ret { reg } => {
-                let reg: usize = reg.into();
-                used_registers[reg] = true;
+                used_registers[reg.0] = true;
                 result.push(instruction);
             }
             IrInstruction::Mvi { dest, .. } => {
-                let dest: usize = dest.into();
-                if used_registers[dest] {
+                if used_registers[dest.0] {
                     result.push(instruction);
                 }
             }
             IrInstruction::MvArg { dest, .. } => {
-                let dest: usize = dest.into();
-                if used_registers[dest] {
+                if used_registers[dest.0] {
                     result.push(instruction);
                 }
             }
@@ -116,29 +96,23 @@ fn dead_store_elimination(
                 op2,
                 operator: _,
             } => {
-                let dest: usize = dest.into();
-                if used_registers[dest] {
-                    let op1: usize = op1.into();
-                    let op2: usize = op2.into();
-                    used_registers[op1] = true;
-                    used_registers[op2] = true;
+                if used_registers[dest.0] {
+                    used_registers[op1.0] = true;
+                    used_registers[op2.0] = true;
                     result.push(instruction);
                 }
             }
             IrInstruction::Neg { dest, op } => {
-                let dest: usize = dest.into();
-                if used_registers[dest] {
-                    let op: usize = op.into();
+                if used_registers[dest.0] {
+                    let op: usize = op.0;
                     used_registers[op] = true;
                     result.push(instruction);
                 }
             }
             IrInstruction::Call { dest, ref args, .. } => {
-                let dest: usize = dest.into();
-                if used_registers[dest] {
+                if used_registers[dest.0] {
                     for arg in args {
-                        let arg: usize = (*arg).into();
-                        used_registers[arg] = true;
+                        used_registers[arg.0] = true;
                     }
                     result.push(instruction);
                 }
@@ -158,7 +132,7 @@ fn rename_registers(body: Vec<IrInstruction>, num_used_registers: usize) -> Repl
     // By default, each register maps to itself
     let mut register_replacement: Vec<IrRegister> = Vec::with_capacity(num_used_registers);
     for i in 0..num_used_registers {
-        register_replacement.push(IrRegister::from_u32(i as u32));
+        register_replacement.push(IrRegister::new(i));
     }
 
     let mut next_expected_register = 0;
@@ -168,36 +142,33 @@ fn rename_registers(body: Vec<IrInstruction>, num_used_registers: usize) -> Repl
             IrInstruction::Ret { reg } => {
                 // Ret is the only instruction that does increment next_expect_register
                 // because it does not alllocate a new register
-                let reg: usize = reg.into();
                 result.push(IrInstruction::Ret {
-                    reg: register_replacement[reg],
+                    reg: register_replacement[reg.0],
                 });
             }
             IrInstruction::Mvi { dest, val } => {
-                let dest: usize = dest.into();
-                if next_expected_register == dest {
+                if next_expected_register == dest.0 {
                     result.push(instruction.clone());
                 } else {
-                    let replaced_register = IrRegister::from_u32(next_expected_register as u32);
+                    let replaced_register = IrRegister::new(next_expected_register);
                     result.push(IrInstruction::Mvi {
                         dest: replaced_register,
                         val,
                     });
-                    register_replacement[dest] = replaced_register;
+                    register_replacement[dest.0] = replaced_register;
                 }
                 next_expected_register += 1;
             }
             IrInstruction::MvArg { dest, arg } => {
-                let dest: usize = dest.into();
-                if next_expected_register == dest {
+                if next_expected_register == dest.0 {
                     result.push(instruction.clone());
                 } else {
-                    let replaced_register = IrRegister::from_u32(next_expected_register as u32);
+                    let replaced_register = IrRegister::new(next_expected_register);
                     result.push(IrInstruction::MvArg {
                         dest: replaced_register,
                         arg,
                     });
-                    register_replacement[dest] = replaced_register;
+                    register_replacement[dest.0] = replaced_register;
                 }
                 next_expected_register += 1;
             }
@@ -209,43 +180,38 @@ fn rename_registers(body: Vec<IrInstruction>, num_used_registers: usize) -> Repl
             } => {
                 dbg!(&register_replacement);
                 dbg!(&register_replacement);
-                let dest_usize: usize = dest.into();
-                let op1: usize = op1.into();
-                let op2: usize = op2.into();
-                if next_expected_register == dest_usize {
+                if next_expected_register == dest.0 {
                     result.push(IrInstruction::BinOp {
                         operator,
                         dest,
-                        op1: register_replacement[op1],
-                        op2: register_replacement[op2],
+                        op1: register_replacement[op1.0],
+                        op2: register_replacement[op2.0],
                     });
                 } else {
-                    let replaced_register = IrRegister::from_u32(next_expected_register as u32);
+                    let replaced_register = IrRegister::new(next_expected_register);
                     result.push(IrInstruction::BinOp {
                         operator,
                         dest: replaced_register,
-                        op1: register_replacement[op1],
-                        op2: register_replacement[op2],
+                        op1: register_replacement[op1.0],
+                        op2: register_replacement[op2.0],
                     });
-                    register_replacement[dest_usize] = replaced_register;
+                    register_replacement[dest.0] = replaced_register;
                 }
                 next_expected_register += 1;
             }
             IrInstruction::Neg { dest, op } => {
-                let dest_usize: usize = dest.into();
-                let op: usize = op.into();
-                if next_expected_register == dest_usize {
+                if next_expected_register == dest.0 {
                     result.push(IrInstruction::Neg {
                         dest,
-                        op: register_replacement[op],
+                        op: register_replacement[op.0],
                     });
                 } else {
-                    let replaced_register = IrRegister::from_u32(next_expected_register as u32);
+                    let replaced_register = IrRegister::new(next_expected_register);
                     result.push(IrInstruction::Neg {
                         dest: replaced_register,
-                        op: register_replacement[op],
+                        op: register_replacement[op.0],
                     });
-                    register_replacement[dest_usize] = replaced_register;
+                    register_replacement[dest.0] = replaced_register;
                 }
                 next_expected_register += 1;
             }
@@ -255,17 +221,12 @@ fn rename_registers(body: Vec<IrInstruction>, num_used_registers: usize) -> Repl
                 function_id,
                 args,
             } => {
-                let dest_usize: usize = dest.into();
-
                 let args = args
                     .into_iter()
-                    .map(|arg| {
-                        let arg: usize = arg.into();
-                        register_replacement[arg]
-                    })
+                    .map(|arg| register_replacement[arg.0])
                     .collect();
 
-                if next_expected_register == dest_usize {
+                if next_expected_register == dest.0 {
                     result.push(IrInstruction::Call {
                         dest,
                         name,
@@ -273,14 +234,14 @@ fn rename_registers(body: Vec<IrInstruction>, num_used_registers: usize) -> Repl
                         args,
                     });
                 } else {
-                    let replaced_register = IrRegister::from_u32(next_expected_register as u32);
+                    let replaced_register = IrRegister::new(next_expected_register);
                     result.push(IrInstruction::Call {
                         dest: replaced_register,
                         name,
                         function_id,
                         args,
                     });
-                    register_replacement[dest_usize] = replaced_register;
+                    register_replacement[dest.0] = replaced_register;
                 }
                 next_expected_register += 1;
             }
