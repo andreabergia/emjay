@@ -1,6 +1,67 @@
 use std::collections::HashMap;
 
-use crate::ir::{CompiledFunction, IrInstruction, IrRegister};
+use crate::ir::{BinOpOperator::*, CompiledFunction, IrInstruction, IrRegister};
+
+/// Replaces
+fn propagate_constants(body: Vec<IrInstruction>, num_used_registers: usize) -> Vec<IrInstruction> {
+    let mut known_constants: Vec<Option<i64>> = vec![None; num_used_registers];
+
+    let mut result = Vec::with_capacity(body.len());
+    for instruction in body {
+        match instruction {
+            IrInstruction::Mvi { dest, val } => {
+                known_constants[dest.0] = Some(val);
+                result.push(instruction.clone());
+            }
+            IrInstruction::BinOp {
+                operator,
+                dest,
+                op1,
+                op2,
+            } => {
+                if let (Some(value1), Some(value2)) =
+                    (known_constants[op1.0], known_constants[op2.0])
+                {
+                    let computed_value = match operator {
+                        Add => value1 + value2,
+                        Sub => value1 - value2,
+                        Mul => value1 * value2,
+                        Div => value1 / value2,
+                    };
+                    known_constants[dest.0] = Some(computed_value);
+                    result.push(IrInstruction::Mvi {
+                        dest,
+                        val: computed_value,
+                    })
+                } else {
+                    // Not a known constant, leave as-is
+                    result.push(instruction.clone());
+                }
+            }
+            IrInstruction::Neg { dest, op } => {
+                if let Some(value) = known_constants[op.0] {
+                    // Replace with a constant
+                    let computed_value = -value;
+                    known_constants[dest.0] = Some(computed_value);
+                    result.push(IrInstruction::Mvi {
+                        dest,
+                        val: computed_value,
+                    })
+                } else {
+                    // Not a known constant, leave as-is
+                    result.push(instruction.clone());
+                }
+            }
+            IrInstruction::Ret { .. }
+            | IrInstruction::MvArg { .. }
+            | IrInstruction::Call { .. } => {
+                // Can't optimize
+                result.push(instruction.clone());
+            }
+        }
+    }
+    result
+}
 
 /// Deduplicates constant assignments, retaining only the first and and replacing any reference
 /// to the second register with a reference to the first
@@ -125,13 +186,13 @@ fn dead_store_elimination(
     result
 }
 
-struct ReplacedBody {
+struct OptimizedBody {
     body: Vec<IrInstruction>,
     num_used_registers: usize,
 }
 
 /// Renames registers to be dense, starting from zero
-fn rename_registers(body: Vec<IrInstruction>, num_used_registers: usize) -> ReplacedBody {
+fn rename_registers(body: Vec<IrInstruction>, num_used_registers: usize) -> OptimizedBody {
     // By default, each register maps to itself
     let mut register_replacement: Vec<IrRegister> = Vec::with_capacity(num_used_registers);
     for i in 0..num_used_registers {
@@ -251,19 +312,24 @@ fn rename_registers(body: Vec<IrInstruction>, num_used_registers: usize) -> Repl
         }
     }
 
-    ReplacedBody {
+    OptimizedBody {
         body: result,
         num_used_registers: next_expected_register,
     }
 }
 
+fn optimize_fun_body(body: Vec<IrInstruction>, num_used_registers: usize) -> OptimizedBody {
+    let body = propagate_constants(body, num_used_registers);
+    let body = deduplicate_constants(body, num_used_registers);
+    let body = dead_store_elimination(body, num_used_registers);
+    rename_registers(body, num_used_registers)
+}
+
 pub fn optimize_fun(fun: CompiledFunction) -> CompiledFunction {
-    let body = deduplicate_constants(fun.body, fun.num_used_registers);
-    let body = dead_store_elimination(body, fun.num_used_registers);
-    let ReplacedBody {
+    let OptimizedBody {
         body,
         num_used_registers,
-    } = rename_registers(body, fun.num_used_registers);
+    } = optimize_fun_body(fun.body, fun.num_used_registers);
     CompiledFunction {
         name: fun.name,
         id: fun.id,
@@ -279,9 +345,36 @@ pub fn optimize(functions: Vec<CompiledFunction>) -> Vec<CompiledFunction> {
 
 #[cfg(test)]
 mod tests {
-    use crate::ir::builders::{add, call, mvarg, mvi};
+    use crate::ir::builders::{add, call, mul, mvarg, mvi, ret};
 
     use super::*;
+
+    #[test]
+    fn can_propagate_constants() {
+        let body = vec![
+            mvi(0, 1),
+            mvi(1, 2),
+            mvarg(2, 0),
+            add(3, 0, 1),
+            add(4, 3, 2),
+            mvi(5, 5),
+            add(6, 5, 3),
+        ];
+        let optimized = propagate_constants(body, 7);
+
+        assert_eq!(
+            vec![
+                mvi(0, 1),
+                mvi(1, 2),
+                mvarg(2, 0),
+                mvi(3, 3),
+                add(4, 3, 2),
+                mvi(5, 5),
+                mvi(6, 8)
+            ],
+            optimized,
+        );
+    }
 
     #[test]
     fn can_deduplicate_constants() {
@@ -313,11 +406,18 @@ mod tests {
             mvi(2, 4),
             add(3, 1, 0),
             call(4, "f", 0, vec![3]),
+            ret(4),
         ];
         let optimized = dead_store_elimination(body, 5);
 
         assert_eq!(
-            vec![mvi(0, 1), mvi(1, 2), add(3, 1, 0), call(4, "f", 0, vec![3])],
+            vec![
+                mvi(0, 1),
+                mvi(1, 2),
+                add(3, 1, 0),
+                call(4, "f", 0, vec![3]),
+                ret(4)
+            ],
             optimized,
         );
     }
@@ -332,5 +432,22 @@ mod tests {
             optimized.body,
         );
         assert_eq!(3, optimized.num_used_registers);
+    }
+
+    #[test]
+    fn can_optimize() {
+        let body = vec![
+            mvi(0, 1),
+            mvi(1, 2),
+            add(2, 0, 1), // r2 will contain a constant, 3
+            mvi(3, 3),
+            mul(4, 2, 3), // r4 will contain a constant, 9
+            mvi(5, 42),
+            ret(4),
+        ];
+        let optimized = optimize_fun_body(body, 6);
+
+        assert_eq!(vec![mvi(0, 9), ret(0)], optimized.body);
+        assert_eq!(1, optimized.num_used_registers);
     }
 }
