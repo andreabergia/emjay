@@ -78,53 +78,55 @@ fn deduplicate_constants(
     let mut constant_values: HashMap<i64, IrRegister> = HashMap::new();
 
     let mut result = Vec::new();
-    body.into_iter().for_each(|instruction| match instruction {
-        IrInstruction::Mvi { dest, val } => {
-            let register_containing_value = constant_values.get(&val);
-            if let Some(register_containing_value) = register_containing_value {
-                // Replace register with cached version in successive instructions, and skip it
-                register_replacement[dest.0] = *register_containing_value;
-            } else {
-                constant_values.insert(val, dest);
+    for instruction in body {
+        match instruction {
+            IrInstruction::Mvi { dest, val } => {
+                let register_containing_value = constant_values.get(&val);
+                if let Some(register_containing_value) = register_containing_value {
+                    // Replace register with cached version in successive instructions, and skip it
+                    register_replacement[dest.0] = *register_containing_value;
+                } else {
+                    constant_values.insert(val, dest);
+                    result.push(instruction.clone());
+                }
+            }
+            IrInstruction::MvArg { .. } => {
                 result.push(instruction.clone());
             }
-        }
-        IrInstruction::MvArg { .. } => {
-            result.push(instruction.clone());
-        }
-        IrInstruction::BinOp {
-            operator,
-            dest,
-            op1,
-            op2,
-        } => result.push(IrInstruction::BinOp {
-            operator,
-            dest,
-            op1: register_replacement[op1.0],
-            op2: register_replacement[op2.0],
-        }),
-        IrInstruction::Neg { dest, op } => result.push(IrInstruction::Neg {
-            dest,
-            op: register_replacement[op.0],
-        }),
-        IrInstruction::Ret { reg } => result.push(IrInstruction::Ret {
-            reg: register_replacement[reg.0],
-        }),
-        IrInstruction::Call {
-            dest,
-            name,
-            function_id,
-            args,
-        } => {
-            let args = args.iter().map(|arg| register_replacement[arg.0]).collect();
-            result.push(IrInstruction::Call {
+            IrInstruction::BinOp {
+                operator,
                 dest,
-                name: name.clone(),
+                op1,
+                op2,
+            } => result.push(IrInstruction::BinOp {
+                operator,
+                dest,
+                op1: register_replacement[op1.0],
+                op2: register_replacement[op2.0],
+            }),
+            IrInstruction::Neg { dest, op } => result.push(IrInstruction::Neg {
+                dest,
+                op: register_replacement[op.0],
+            }),
+            IrInstruction::Ret { reg } => result.push(IrInstruction::Ret {
+                reg: register_replacement[reg.0],
+            }),
+            IrInstruction::Call {
+                dest,
+                name,
                 function_id,
                 args,
-            })
+            } => {
+                let args = args.iter().map(|arg| register_replacement[arg.0]).collect();
+                result.push(IrInstruction::Call {
+                    dest,
+                    name: name.clone(),
+                    function_id,
+                    args,
+                })
+            }
         }
-    });
+    }
     result
 }
 
