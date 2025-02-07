@@ -17,15 +17,15 @@ fn deduplicate_constants(
     let mut constant_values: HashMap<i64, IrRegister> = HashMap::new();
 
     let mut result = Vec::new();
-    body.iter().for_each(|instruction| match instruction {
+    body.into_iter().for_each(|instruction| match instruction {
         IrInstruction::Mvi { dest, val } => {
-            let dest_usize: usize = (*dest).into();
-            let register_containing_value = constant_values.get(val);
+            let dest_usize: usize = dest.into();
+            let register_containing_value = constant_values.get(&val);
             if let Some(register_containing_value) = register_containing_value {
                 // Replace register with cached version in successive instructions, and skip it
                 register_replacement[dest_usize] = *register_containing_value;
             } else {
-                constant_values.insert(*val, *dest);
+                constant_values.insert(val, dest);
                 result.push(instruction.clone());
             }
         }
@@ -38,24 +38,24 @@ fn deduplicate_constants(
             op1,
             op2,
         } => {
-            let op1: usize = (*op1).into();
-            let op2: usize = (*op2).into();
+            let op1: usize = op1.into();
+            let op2: usize = op2.into();
             result.push(IrInstruction::BinOp {
-                operator: *operator,
-                dest: *dest,
+                operator,
+                dest,
                 op1: register_replacement[op1],
                 op2: register_replacement[op2],
             })
         }
         IrInstruction::Neg { dest, op } => {
-            let op: usize = (*op).into();
+            let op: usize = op.into();
             result.push(IrInstruction::Neg {
-                dest: *dest,
+                dest,
                 op: register_replacement[op],
             })
         }
         IrInstruction::Ret { reg } => {
-            let reg: usize = (*reg).into();
+            let reg: usize = reg.into();
             result.push(IrInstruction::Ret {
                 reg: register_replacement[reg],
             })
@@ -74,9 +74,9 @@ fn deduplicate_constants(
                 })
                 .collect();
             result.push(IrInstruction::Call {
-                dest: *dest,
+                dest,
                 name: name.clone(),
-                function_id: *function_id,
+                function_id,
                 args,
             })
         }
