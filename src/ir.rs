@@ -54,6 +54,17 @@ pub enum BinOpOperator {
     Div,
 }
 
+impl fmt::Display for BinOpOperator {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            BinOpOperator::Add => write!(f, "add"),
+            BinOpOperator::Sub => write!(f, "sub"),
+            BinOpOperator::Mul => write!(f, "mul"),
+            BinOpOperator::Div => write!(f, "div"),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum IrInstruction {
     Mvi {
@@ -130,7 +141,7 @@ impl fmt::Display for IrInstruction {
                 op1,
                 op2,
             } => {
-                write!(f, "{:?}  @r{}, r{}, r{}", operator, dest, op1, op2)
+                write!(f, "{}  @r{}, r{}, r{}", operator, dest, op1, op2)
             }
             IrInstruction::Ret { reg } => write!(f, "ret  r{}", reg),
             IrInstruction::Call {
