@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::ir::{CompiledFunction, IrInstruction, IrRegister};
 
 /// Deduplicates constant assignments, retaining only the first and and replacing any reference
-/// to the second register with a reference to the first.
+/// to the second register with a reference to the first
 fn deduplicate_constants(
     body: Vec<IrInstruction>,
     num_used_registers: usize,
@@ -67,6 +67,8 @@ fn deduplicate_constants(
     result
 }
 
+/// Removes dead store allocations, i.e. movements to registers that aren't used
+/// in any `ret` statement
 fn dead_store_elimination(
     body: Vec<IrInstruction>,
     num_used_registers: usize,
@@ -128,6 +130,7 @@ struct ReplacedBody {
     num_used_registers: usize,
 }
 
+/// Renames registers to be dense, starting from zero
 fn rename_registers(body: Vec<IrInstruction>, num_used_registers: usize) -> ReplacedBody {
     // By default, each register maps to itself
     let mut register_replacement: Vec<IrRegister> = Vec::with_capacity(num_used_registers);
@@ -276,12 +279,9 @@ pub fn optimize(functions: Vec<CompiledFunction>) -> Vec<CompiledFunction> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        ir::builders::{add, call, mvi},
-        optimization::rename_registers,
-    };
+    use crate::ir::builders::{add, call, mvarg, mvi};
 
-    use super::deduplicate_constants;
+    use super::*;
 
     #[test]
     fn can_deduplicate_constants() {
@@ -310,11 +310,11 @@ mod tests {
         let body = vec![
             mvi(0, 1),
             mvi(1, 2),
-            mvi(2, 1),
+            mvi(2, 4),
             add(3, 1, 0),
             call(4, "f", 0, vec![3]),
         ];
-        let optimized = deduplicate_constants(body, 4);
+        let optimized = dead_store_elimination(body, 5);
 
         assert_eq!(
             vec![mvi(0, 1), mvi(1, 2), add(3, 1, 0), call(4, "f", 0, vec![3])],
