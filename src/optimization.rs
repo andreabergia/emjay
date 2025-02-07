@@ -2,7 +2,20 @@ use std::collections::HashMap;
 
 use crate::ir::{BinOpOperator::*, CompiledFunction, IrInstruction, IrRegister};
 
-/// Replaces
+/// Replaces algebraic expressions with their computed values, if possible. For example:
+/// ```
+/// mov r0, 1
+/// mov r1, 2
+/// add r2, r0, r1
+/// ````
+///
+/// becomes
+///
+/// ```
+/// mov r0, 1
+/// mov r1, 2
+/// mov r2, 3
+/// ````
 fn propagate_constants(body: Vec<IrInstruction>, num_used_registers: usize) -> Vec<IrInstruction> {
     let mut known_constants: Vec<Option<i64>> = vec![None; num_used_registers];
 
@@ -64,7 +77,19 @@ fn propagate_constants(body: Vec<IrInstruction>, num_used_registers: usize) -> V
 }
 
 /// Deduplicates constant assignments, retaining only the first and and replacing any reference
-/// to the second register with a reference to the first
+/// to the second register with a reference to the first. Meaning:
+/// ```
+/// mov r0, 1
+/// mov r1, 1
+/// ret r1
+/// ```
+///
+/// becomes
+///
+/// ```
+/// mov r0, 1
+/// ret r0
+/// ```
 fn deduplicate_constants(
     body: Vec<IrInstruction>,
     num_used_registers: usize,
@@ -131,7 +156,19 @@ fn deduplicate_constants(
 }
 
 /// Removes dead store allocations, i.e. movements to registers that aren't used
-/// in any `ret` statement
+/// in any `ret` statement. For example:
+/// ```
+/// mov r0, 1
+/// mov r1, 2
+/// ret r0
+/// ```
+///
+/// becomes
+///
+/// ```
+/// mov r0, 1
+/// ret r0
+/// ````
 fn dead_store_elimination(
     body: Vec<IrInstruction>,
     num_used_registers: usize,
@@ -193,7 +230,20 @@ struct OptimizedBody {
     num_used_registers: usize,
 }
 
-/// Renames registers to be dense, starting from zero
+/// Renames registers to be dense, starting from zero. For example:
+/// ```
+/// mov r0, 1
+/// mov r2, 2
+/// add r4, r2, r0
+/// ```
+///
+/// becomes:
+///
+/// ```
+/// mov r0, 1
+/// mov r1, 2
+/// add r2, r1, r0
+/// ```
 fn rename_registers(body: Vec<IrInstruction>, num_used_registers: usize) -> OptimizedBody {
     // By default, each register maps to itself
     let mut register_replacement: Vec<IrRegister> = Vec::with_capacity(num_used_registers);
