@@ -9,4 +9,4 @@
 - [x] get rid of doubles
 - [x] negate
 - [x] replace Add/Sub etc with a single "BinOp" and an operator
-- [ ] readme
+- [x] readme
