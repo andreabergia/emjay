@@ -2,6 +2,7 @@ use pest::error::Error;
 use pest::iterators::Pair;
 use pest::Parser;
 use thiserror::Error;
+use tracing::debug;
 
 use crate::ast::{Block, BlockElement, Expression, Function, FunctionCall, Program};
 use crate::grammar::{EmjayGrammar, Rule};
@@ -101,12 +102,15 @@ pub fn parse_program(program: &str) -> Result<Program, Box<ParseError>> {
     let mut functions: Program = Default::default();
     for rule in parsed.into_inner() {
         match rule.as_rule() {
-            Rule::functionDeclaration => functions.push(parse_function(rule)),
+            Rule::functionDeclaration => {
+                let function = parse_function(rule);
+                debug!("ast: {:?}", function);
+                functions.push(function);
+            }
             Rule::EOI => {}
             _ => unreachable!(),
         }
     }
-
     Ok(functions)
 }
 

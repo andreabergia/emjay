@@ -1,7 +1,7 @@
 #[allow(unused)]
 use rustix::mm::{mmap_anonymous, mprotect, MapFlags, MprotectFlags, ProtFlags};
 use thiserror::Error;
-use tracing::{debug, info, span, Level};
+use tracing::{debug, info};
 
 #[allow(unused)]
 use crate::backend_aarch64::Aarch64Generator;
@@ -96,7 +96,6 @@ pub fn jit_compile_program(source: &str, main_function_name: &str) -> Result<Jit
 
     let program = parser::parse_program(source)?;
     let compiled_functions = frontend::compile(program)?;
-    let optimized_functions = optimization::optimize(compiled_functions);
 
     #[cfg(all(target_arch = "x86_64", target_os = "linux"))]
     let mut gen = X64LinuxGenerator::default();
@@ -105,15 +104,17 @@ pub fn jit_compile_program(source: &str, main_function_name: &str) -> Result<Jit
 
     // Create the function catalog and stores it in a box, to ensure that it will be at a fixed
     // address and not be de-allocated
-    let mut function_catalog = Box::new(CompiledFunctionCatalog::new(&optimized_functions));
+    let mut function_catalog = Box::new(CompiledFunctionCatalog::new(&compiled_functions));
     let function_catalog_ptr: *const CompiledFunctionCatalog = &*function_catalog;
     debug!("function catalog: {:0X}", function_catalog_ptr as usize);
 
     let mut main_function = None;
-    for function in optimized_functions.iter() {
-        let _span = span!(Level::DEBUG, "jit function", name = function.name);
+    for function in compiled_functions.iter() {
         debug!("compiling function: {}", function.name);
-        debug!("ir:\n{}", function);
+        debug!("base ir:\n{}", function);
+
+        let function = &optimization::optimize_fun(function);
+        debug!("optimized ir:\n{}", function);
 
         let machine_code = gen.generate_machine_code(function, &function_catalog)?;
         debug!("asm:\n{}", machine_code.asm);

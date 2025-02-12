@@ -16,14 +16,14 @@ use crate::ir::{BinOpOperator::*, CompiledFunction, IrInstruction, IrRegister};
 /// mov r1, 2
 /// mov r2, 3
 /// ````
-fn propagate_constants(body: Vec<IrInstruction>, num_used_registers: usize) -> Vec<IrInstruction> {
+fn propagate_constants(body: &[IrInstruction], num_used_registers: usize) -> Vec<IrInstruction> {
     let mut known_constants: Vec<Option<i64>> = vec![None; num_used_registers];
 
     let mut result = Vec::with_capacity(body.len());
     for instruction in body {
         match instruction {
             IrInstruction::Mvi { dest, val } => {
-                known_constants[dest.0] = Some(val);
+                known_constants[dest.0] = Some(*val);
                 result.push(instruction.clone());
             }
             IrInstruction::BinOp {
@@ -43,7 +43,7 @@ fn propagate_constants(body: Vec<IrInstruction>, num_used_registers: usize) -> V
                     };
                     known_constants[dest.0] = Some(computed_value);
                     result.push(IrInstruction::Mvi {
-                        dest,
+                        dest: *dest,
                         val: computed_value,
                     })
                 } else {
@@ -57,7 +57,7 @@ fn propagate_constants(body: Vec<IrInstruction>, num_used_registers: usize) -> V
                     let computed_value = -value;
                     known_constants[dest.0] = Some(computed_value);
                     result.push(IrInstruction::Mvi {
-                        dest,
+                        dest: *dest,
                         val: computed_value,
                     })
                 } else {
@@ -90,10 +90,7 @@ fn propagate_constants(body: Vec<IrInstruction>, num_used_registers: usize) -> V
 /// mov r0, 1
 /// ret r0
 /// ```
-fn deduplicate_constants(
-    body: Vec<IrInstruction>,
-    num_used_registers: usize,
-) -> Vec<IrInstruction> {
+fn deduplicate_constants(body: &[IrInstruction], num_used_registers: usize) -> Vec<IrInstruction> {
     // By default, each register maps to itself
     let mut register_replacement: Vec<IrRegister> = Vec::with_capacity(num_used_registers);
     for i in 0..num_used_registers {
@@ -106,12 +103,12 @@ fn deduplicate_constants(
     for instruction in body {
         match instruction {
             IrInstruction::Mvi { dest, val } => {
-                let register_containing_value = constant_values.get(&val);
+                let register_containing_value = constant_values.get(val);
                 if let Some(register_containing_value) = register_containing_value {
                     // Replace register with cached version in successive instructions, and skip it
                     register_replacement[dest.0] = *register_containing_value;
                 } else {
-                    constant_values.insert(val, dest);
+                    constant_values.insert(*val, *dest);
                     result.push(instruction.clone());
                 }
             }
@@ -124,13 +121,13 @@ fn deduplicate_constants(
                 op1,
                 op2,
             } => result.push(IrInstruction::BinOp {
-                operator,
-                dest,
+                operator: *operator,
+                dest: *dest,
                 op1: register_replacement[op1.0],
                 op2: register_replacement[op2.0],
             }),
             IrInstruction::Neg { dest, op } => result.push(IrInstruction::Neg {
-                dest,
+                dest: *dest,
                 op: register_replacement[op.0],
             }),
             IrInstruction::Ret { reg } => result.push(IrInstruction::Ret {
@@ -144,9 +141,9 @@ fn deduplicate_constants(
             } => {
                 let args = args.iter().map(|arg| register_replacement[arg.0]).collect();
                 result.push(IrInstruction::Call {
-                    dest,
+                    dest: *dest,
                     name: name.clone(),
-                    function_id,
+                    function_id: *function_id,
                     args,
                 })
             }
@@ -169,27 +166,24 @@ fn deduplicate_constants(
 /// mov r0, 1
 /// ret r0
 /// ````
-fn dead_store_elimination(
-    body: Vec<IrInstruction>,
-    num_used_registers: usize,
-) -> Vec<IrInstruction> {
+fn dead_store_elimination(body: &[IrInstruction], num_used_registers: usize) -> Vec<IrInstruction> {
     let mut used_registers = vec![false; num_used_registers];
 
     let mut result = Vec::new();
-    for instruction in body.into_iter().rev() {
+    for instruction in body.iter().rev() {
         match instruction {
             IrInstruction::Ret { reg } => {
                 used_registers[reg.0] = true;
-                result.push(instruction);
+                result.push(instruction.clone());
             }
             IrInstruction::Mvi { dest, .. } => {
                 if used_registers[dest.0] {
-                    result.push(instruction);
+                    result.push(instruction.clone());
                 }
             }
             IrInstruction::MvArg { dest, .. } => {
                 if used_registers[dest.0] {
-                    result.push(instruction);
+                    result.push(instruction.clone());
                 }
             }
             IrInstruction::BinOp {
@@ -201,14 +195,14 @@ fn dead_store_elimination(
                 if used_registers[dest.0] {
                     used_registers[op1.0] = true;
                     used_registers[op2.0] = true;
-                    result.push(instruction);
+                    result.push(instruction.clone());
                 }
             }
             IrInstruction::Neg { dest, op } => {
                 if used_registers[dest.0] {
                     let op: usize = op.0;
                     used_registers[op] = true;
-                    result.push(instruction);
+                    result.push(instruction.clone());
                 }
             }
             IrInstruction::Call { dest, ref args, .. } => {
@@ -216,7 +210,7 @@ fn dead_store_elimination(
                     for arg in args {
                         used_registers[arg.0] = true;
                     }
-                    result.push(instruction);
+                    result.push(instruction.clone());
                 }
             }
         }
@@ -294,8 +288,6 @@ fn rename_registers(body: Vec<IrInstruction>, num_used_registers: usize) -> Opti
                 op1,
                 op2,
             } => {
-                dbg!(&register_replacement);
-                dbg!(&register_replacement);
                 if next_expected_register == dest.0 {
                     result.push(IrInstruction::BinOp {
                         operator,
@@ -370,18 +362,18 @@ fn rename_registers(body: Vec<IrInstruction>, num_used_registers: usize) -> Opti
     }
 }
 
-fn optimize_fun_body(body: Vec<IrInstruction>, num_used_registers: usize) -> OptimizedBody {
+fn optimize_fun_body(body: &[IrInstruction], num_used_registers: usize) -> OptimizedBody {
     let body = propagate_constants(body, num_used_registers);
-    let body = deduplicate_constants(body, num_used_registers);
-    let body = dead_store_elimination(body, num_used_registers);
+    let body = deduplicate_constants(&body, num_used_registers);
+    let body = dead_store_elimination(&body, num_used_registers);
     rename_registers(body, num_used_registers)
 }
 
-pub fn optimize_fun(fun: CompiledFunction) -> CompiledFunction {
+pub fn optimize_fun<'a>(fun: &CompiledFunction<'a>) -> CompiledFunction<'a> {
     let OptimizedBody {
         body,
         num_used_registers,
-    } = optimize_fun_body(fun.body, fun.num_used_registers);
+    } = optimize_fun_body(&fun.body, fun.num_used_registers);
     CompiledFunction {
         name: fun.name,
         id: fun.id,
@@ -389,10 +381,6 @@ pub fn optimize_fun(fun: CompiledFunction) -> CompiledFunction {
         body,
         num_used_registers,
     }
-}
-
-pub fn optimize(functions: Vec<CompiledFunction>) -> Vec<CompiledFunction> {
-    functions.into_iter().map(|fun| optimize_fun(fun)).collect()
 }
 
 #[cfg(test)]
@@ -412,7 +400,7 @@ mod tests {
             mvi(5, 5),
             add(6, 5, 3),
         ];
-        let optimized = propagate_constants(body, 7);
+        let optimized = propagate_constants(&body, 7);
 
         assert_eq!(
             vec![
@@ -437,7 +425,7 @@ mod tests {
             add(3, 1, 2),
             call(4, "f", 0, vec![3, 0, 2]),
         ];
-        let optimized = deduplicate_constants(body, 4);
+        let optimized = deduplicate_constants(&body, 4);
 
         assert_eq!(
             vec![
@@ -460,7 +448,7 @@ mod tests {
             call(4, "f", 0, vec![3]),
             ret(4),
         ];
-        let optimized = dead_store_elimination(body, 5);
+        let optimized = dead_store_elimination(&body, 5);
 
         assert_eq!(
             vec![
@@ -497,7 +485,7 @@ mod tests {
             mvi(5, 42),
             ret(4),
         ];
-        let optimized = optimize_fun_body(body, 6);
+        let optimized = optimize_fun_body(&body, 6);
 
         assert_eq!(vec![mvi(0, 9), ret(0)], optimized.body);
         assert_eq!(1, optimized.num_used_registers);
