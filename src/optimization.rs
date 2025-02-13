@@ -169,6 +169,8 @@ fn deduplicate_constants(body: &[IrInstruction], num_used_registers: usize) -> V
 fn dead_store_elimination(body: &[IrInstruction], num_used_registers: usize) -> Vec<IrInstruction> {
     let mut used_registers = vec![false; num_used_registers];
 
+    // Start from the last instruction (which should be a `ret`) and propagate
+    // used registers backwards.
     let mut result = Vec::new();
     for instruction in body.iter().rev() {
         match instruction {
@@ -215,6 +217,8 @@ fn dead_store_elimination(body: &[IrInstruction], num_used_registers: usize) -> 
             }
         }
     }
+
+    // Reorder the instruction
     result.reverse();
     result
 }
