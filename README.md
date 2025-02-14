@@ -14,7 +14,7 @@ It's a glorified calculator, basically. ☺️ But it does it in a pretty compli
 
 - it parses the input string and generates an [AST](https://en.wikipedia.org/wiki/Abstract_syntax_tree);
 - it processes the AST and generates and [IR](https://en.wikipedia.org/wiki/Intermediate_representation) in [SSA](https://en.wikipedia.org/wiki/Static_single-assignment_form);
-- it the performs some basic optimization on the IR;
+- it then performs some basic optimization on the IR;
 - it then generates machine code from the IR;
 - and finally it executes it and performs the computation.
 
