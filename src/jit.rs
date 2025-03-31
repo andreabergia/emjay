@@ -171,18 +171,16 @@ pub fn jit_call_trampoline(
     a3: i64,
     a4: i64,
     a5: i64,
-    a6: i64,
 ) -> i64 {
     debug!(
-        "inside trampoline, with args {:?} {} - {} {} {} {} {} {} {}",
-        function_catalog_ptr, function_index, a0, a1, a2, a3, a4, a5, a6,
+        "inside trampoline, with args {:?} {} - {} {} {} {} {} {}",
+        function_catalog_ptr, function_index, a0, a1, a2, a3, a4, a5,
     );
     let function_catalog = unsafe { &*function_catalog_ptr };
     let fun = function_catalog.get_function_pointer(FunctionId(function_index));
     debug!("  function pointer found: {:?}", fun);
 
-    let fun: fn(i64, i64, i64, i64, i64, i64, i64) -> i64 = unsafe { std::mem::transmute(fun) };
-    let result = fun(a0, a1, a2, a3, a4, a5, a6);
+    let result = fun(a0, a1, a2, a3, a4, a5);
 
     debug!("  callee function result: {}", result);
     result
